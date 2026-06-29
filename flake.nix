@@ -80,8 +80,10 @@
             #!${pkgs.bash}/bin/bash
             set -e
             : "''${AGENT_WORKDIR:?AGENT_WORKDIR must be set to the workspace path}"
-            exec ${pkgs.sops}/bin/sops exec-env "$AGENT_WORKDIR/secrets.yaml" \
-                ${sandboxedAgent}/bin/claude-agent "$@"
+            set -a
+            source <(${pkgs.sops}/bin/sops --decrypt --output-type dotenv "$AGENT_WORKDIR/secrets.yaml")
+            set +a
+            exec ${sandboxedAgent}/bin/claude-agent "$@"
         '';
     in {
         packages.${system} = {

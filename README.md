@@ -21,32 +21,41 @@ agent can be given full privilege.
    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_agent -C "agent"
    ```
 
-2. Create a `.sops.yaml` in your project root with your SSH public key:
+2. Create the main directory where you will put your different projects (called
+   `WORKSPACE` here). Generate a [long life Claude
+   token](https://code.claude.com/docs/en/authentication#generate-a-long-lived-token),
+   if you don't have one:
+   ```bash
+   claude setup-token
+   ```
+
+3. Create a `.sops.yaml` in your project root with your SSH public key:
    ```yaml
    keys:
-     - &mykey ssh-ed25519 AAAA...your-agent-ssh-public-key...  # cat ~/.ssh/id_ed25519_agent.pub
+     - &agentkey ssh-ed25519 AAAA...your-agent-ssh-public-key... # cat ~/.ssh/id_ed25519_agent.pub
    creation_rules:
      - path_regex: secrets\.yaml
        key_groups:
          - age:
-           - *mykey
+           - *agentkey
    ```
-
-3. Create the `agent_workspace/` directory and encrypt your secrets into it:
+   Create a secrets file at the root
    ```bash
-   mkdir agent_workspace
-   sops agent_workspace/secrets.yaml
+   sops WORKSPACE/secrets.yaml
+   # or, if you don't have sops installed
+   nix-shell -p sops --run "export SOPS_AGE_SSH_PRIVATE_KEY_FILE=\"YOUR_HOME/.ssh/id_ed25519_agent\"; sops secrets.yaml"
    ```
-   Add the following to the file, then save and close:
+   and the Claude token in it as follows:
    ```yaml
    CLAUDE_CODE_OAUTH_TOKEN: your-token-here
    ```
-   If your SSH key has a passphrase, sops will prompt for it.
+   If your SSH key has a passphrase, sops will prompt for it. This `secrets.yaml`
+   file is encrypted by the ssh key, and can safely be put in a git repository.
 
 ## Usage
 
 ```bash
-AGENT_WORKDIR=./agent_workspace nix run github:Antoinemarteau/ai-agent-nix-sandboxing
+AGENT_WORKDIR=./WORKSPACE nix run github:Antoinemarteau/ai-agent-nix-sandboxing
 ```
 
 ## Technical details
