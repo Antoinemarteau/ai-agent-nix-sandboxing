@@ -79,7 +79,8 @@
         agentLauncher = pkgs.writeScriptBin "claude-agent" ''
             #!${pkgs.bash}/bin/bash
             set -e
-            : "''${AGENT_WORKDIR:?AGENT_WORKDIR must be set to the workspace path}"
+            export AGENT_WORKDIR="''${AGENT_WORKDIR:-$PWD}"
+            export SOPS_AGE_SSH_PRIVATE_KEY_FILE="''${SOPS_AGE_SSH_PRIVATE_KEY_FILE:-$HOME/.ssh/id_ed25519_agent}"
             set -a
             source <(${pkgs.sops}/bin/sops --decrypt --output-type dotenv "$AGENT_WORKDIR/secrets.yaml")
             set +a

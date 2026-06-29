@@ -55,6 +55,10 @@ agent can be given full privilege.
 ## Usage
 
 ```bash
+# from the workspace directory (uses current directory by default)
+nix run github:Antoinemarteau/ai-agent-nix-sandboxing
+
+# or from anywhere, pointing to the workspace explicitly
 AGENT_WORKDIR=./WORKSPACE nix run github:Antoinemarteau/ai-agent-nix-sandboxing
 ```
 
