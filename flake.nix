@@ -73,6 +73,8 @@
             '')
             (with jail.combinators; [
                 network
+                time-zone
+                no-new-session
                 (rw-bind (noescape "\"$AGENT_WORKDIR\"") "/workspace")
             ]);
     in {
