@@ -15,7 +15,7 @@
     };
     jail = jail-nix.lib.init pkgs;
 
-    opencode-pkg = llm-agents.packages.${system}.opencode;
+    # I'm using crush and opencode, but you could swap in others.
     claude-pkg = llm-agents.packages.${system}.claude-code;
 
     commonPkgs = with pkgs; [
@@ -41,25 +41,12 @@
       time-zone
       no-new-session
       mount-cwd
+      # Store claude config and session state in the project directory
+      #(set-env "CLAUDE_CONFIG_DIR" (noescape "\"$PWD/.claude\""))
     ];
 
     makeJailedClaude = { extraPkgs ? [] }: jail "jailed-claude" claude-pkg (with jail.combinators; (
       commonJailOptions ++ [
-        #(readwrite (noescape "~/.config/crush"))
-        #(readwrite (noescape "~/.local/share/crush"))
-
-        (add-pkg-deps commonPkgs)
-        (add-pkg-deps extraPkgs)
-      ]));
-
-    makeJailedOpencode = { extraPkgs ? [] }: jail "jailed-opencode" opencode-pkg (with jail.combinators; (
-      commonJailOptions ++ [
-        # Give it a safe spot for its own config and cache.
-        # This also lets it remember things between sessions.
-        (readwrite (noescape "~/.config/opencode"))
-        (readwrite (noescape "~/.local/share/opencode"))
-        (readwrite (noescape "~/.local/state/opencode"))
-
         (add-pkg-deps commonPkgs)
         (add-pkg-deps extraPkgs)
       ]));
@@ -67,15 +54,11 @@
   in
   {
     lib = {
-      inherit makeJailedOpencode;
       inherit makeJailedClaude;
     };
 
     devShells.default = pkgs.mkShell {
       packages = [
-        pkgs.nixd # A little something for my editor.
-
-        (makeJailedOpencode {})
         (makeJailedClaude {})
       ];
     };
