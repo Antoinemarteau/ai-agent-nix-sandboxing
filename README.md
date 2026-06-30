@@ -44,12 +44,17 @@ agent can be given full privilege.
 
 ## Usage
 
+Enter the dev shell once:
 ```bash
-# from the workspace directory (uses current directory by default)
-nix run github:Antoinemarteau/ai-agent-nix-sandboxing
+nix develop github:Antoinemarteau/ai-agent-nix-sandboxing
+```
 
-# or from anywhere, pointing to the workspace explicitly
-AGENT_WORKDIR=./WORKSPACE nix run github:Antoinemarteau/ai-agent-nix-sandboxing
+This puts `jailed-claude` in your PATH. Then, from any project directory, run
+the agent — the sandbox automatically mounts your current directory as the
+agent's workspace:
+```bash
+cd ~/myproject
+jailed-claude
 ```
 
 ## Technical details
