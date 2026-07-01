@@ -11,3 +11,4 @@ result
 /agent_workspaces/.claude/settings.json
 /agent_workspaces/.claude.json
 /agent_workspaces/.claude/*
+.claude/*
