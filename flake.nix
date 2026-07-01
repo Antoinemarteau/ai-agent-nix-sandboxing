@@ -24,10 +24,14 @@
 
         (jailed-agents.lib.${system}.makeJailedClaude {
           extraPkgs = [ ];
+          allowedDomains = jailed-agents.lib.${system}.defaultAllowedDomains;
+         # allowedDomains = jailed-agents.lib.${system}.defaultAllowedDomains
+         #                ++ [ "pkg.julialang.org" "github.com" ];
         })
 
         (jailed-agents.lib.${system}.makeJailedShell {
           extraPkgs = [ claude-code ];
+          allowedDomains = jailed-agents.lib.${system}.defaultAllowedDomains;
         })
 
       ];

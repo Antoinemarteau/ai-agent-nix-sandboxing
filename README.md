@@ -63,5 +63,9 @@ The tool is developed using nix and only requires installing the [nix package
 manager](https://nixos.org/download/) (it is a "nix flake"). The user
 namespaces are created by
 [bubblewrap](https://github.com/containers/bubblewrap) via [jail.nix](https://sr.ht/~alexdavid/jail.nix/).
+Network access is restricted to an [allowlist](jailed-agents/flake.nix) of
+Anthropic-hosted domains via
+[sandbox-runtime](https://github.com/anthropic-experimental/sandbox-runtime),
+which runs an HTTP/SOCKS proxy inside an isolated network namespace.
 
 Written using Claude-code.
