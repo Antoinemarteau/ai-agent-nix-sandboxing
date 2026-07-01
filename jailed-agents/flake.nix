@@ -45,42 +45,47 @@
       (fwd-env "USER") # important to be able to re-use the .claude.json, which depend on the user
     ];
 
-    claudeConfigBinds = with jail.combinators; [
-      (rw-bind (noescape "\"$DEVSHELL_ROOT/.claude\"") (noescape "~/.claude"))
-      (rw-bind (noescape "\"$DEVSHELL_ROOT/.claude/.claude.json\"") (noescape "~/.claude.json"))
+    claudeConfigBinds = devshellRoot: with jail.combinators; [
+      (rw-bind (noescape "\"${devshellRoot}/.claude\"") (noescape "~/.claude"))
+      (rw-bind (noescape "\"${devshellRoot}/.claude/.claude.json\"") (noescape "~/.claude.json"))
     ];
 
     # .claude.json needs to be created within the jail to be valid, but it is
     # linked to a temporary folder (the jail's home). This pre hook makes sure
     # that a writable .claude.json exists both on the host and in the jail.
-    withClaudeConfigInit = { name, inner }: pkgs.writeShellScriptBin name ''
+    withClaudeConfigInit = { name, inner, devshellRoot }: pkgs.writeShellScriptBin name ''
       set -e
-      if [ -z "''${DEVSHELL_ROOT:-}" ]; then
-        echo "${name}: DEVSHELL_ROOT must be set" >&2
-        exit 1
-      fi
+      DEVSHELL_ROOT=${pkgs.lib.escapeShellArg devshellRoot}
+      case "$(realpath "$PWD")/" in
+        "$(realpath "$DEVSHELL_ROOT")/"*) ;;
+        *)
+          echo "${name}: must be run from within $DEVSHELL_ROOT" >&2
+          echo "  current: $PWD" >&2
+          exit 1
+          ;;
+      esac
       mkdir -p "$DEVSHELL_ROOT/.claude"
       touch "$DEVSHELL_ROOT/.claude/.claude.json"
       exec ${inner}/bin/${name}-inner "$@"
     '';
 
-    makeJailedShell = { extraPkgs ? [] }:
+    makeJailedShell = { extraPkgs ? [], devshellRoot }:
       let
         inner = jail "jailed-shell-inner" pkgs.bashInteractive (with jail.combinators;
-          commonJailOptions ++ claudeConfigBinds ++ [
+          commonJailOptions ++ (claudeConfigBinds devshellRoot) ++ [
             (add-pkg-deps commonPkgs)
             (add-pkg-deps extraPkgs)
           ]);
-      in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
+      in withClaudeConfigInit { name = "jailed-shell"; inherit inner devshellRoot; };
 
-    makeJailedClaude = { extraPkgs ? [] }:
+    makeJailedClaude = { extraPkgs ? [], devshellRoot }:
       let
         inner = jail "jailed-claude-inner" claude-pkg (with jail.combinators;
-          commonJailOptions ++ claudeConfigBinds ++ [
+          commonJailOptions ++ (claudeConfigBinds devshellRoot) ++ [
             (add-pkg-deps commonPkgs)
             (add-pkg-deps extraPkgs)
           ]);
-      in withClaudeConfigInit { name = "jailed-claude"; inherit inner; };
+      in withClaudeConfigInit { name = "jailed-claude"; inherit inner devshellRoot; };
 
     #makeJailedOpencode = { extraPkgs ? [] }: jail "jailed-opencode" opencode-pkg (with jail.combinators; (
     #  commonJailOptions ++ [

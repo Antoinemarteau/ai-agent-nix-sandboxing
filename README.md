@@ -44,7 +44,10 @@ agent can be given full privilege.
 
 ## Usage
 
-Clone the repo, then from the project root start (or restart) the tmux session:
+Clone the repo. If your checkout is not at `/home/antoine/prog/ai-agent-sandboxing`,
+edit the `devshellRoot` variable in the top-level `flake.nix`.
+
+From the project root, start (or restart) the tmux session:
 ```bash
 nix develop .
 ```
