@@ -46,8 +46,8 @@
     ];
 
     claudeConfigBinds = with jail.combinators; [
-      (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG\"") (noescape "~/.claude"))
-      (rw-bind (noescape "\"$JAILED_CLAUDE_CONFIG/.claude.json\"") (noescape "~/.claude.json"))
+      (rw-bind (noescape "\"$DEVSHELL_ROOT/.claude\"") (noescape "~/.claude"))
+      (rw-bind (noescape "\"$DEVSHELL_ROOT/.claude/.claude.json\"") (noescape "~/.claude.json"))
     ];
 
     # .claude.json needs to be created within the jail to be valid, but it is
@@ -55,12 +55,12 @@
     # that a writable .claude.json exists both on the host and in the jail.
     withClaudeConfigInit = { name, inner }: pkgs.writeShellScriptBin name ''
       set -e
-      if [ -z "''${JAILED_CLAUDE_CONFIG:-}" ]; then
-        echo "${name}: JAILED_CLAUDE_CONFIG must be set" >&2
+      if [ -z "''${DEVSHELL_ROOT:-}" ]; then
+        echo "${name}: DEVSHELL_ROOT must be set" >&2
         exit 1
       fi
-      mkdir -p "$JAILED_CLAUDE_CONFIG"
-      touch "$JAILED_CLAUDE_CONFIG/.claude.json"
+      mkdir -p "$DEVSHELL_ROOT/.claude"
+      touch "$DEVSHELL_ROOT/.claude/.claude.json"
       exec ${inner}/bin/${name}-inner "$@"
     '';
 

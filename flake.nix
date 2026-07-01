@@ -33,8 +33,8 @@
       ];
 
       shellHook = ''
-        export JAILED_CLAUDE_CONFIG="$PWD/.claude"
-        mkdir -p "$JAILED_CLAUDE_CONFIG"
+        export DEVSHELL_ROOT="$(git rev-parse --show-toplevel)/"
+        mkdir -p "$DEVSHELL_ROOT/.claude"
       '';
     };
   });
