@@ -38,6 +38,9 @@
         pkgs.zsh
         (pkgs.writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
         (pkgs.writeShellScriptBin "yolo-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
+        (pkgs.writeShellScriptBin "kaimon" ''exec jailed-kaimon "$@"'')
+        (pkgs.writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
+
 
         (jailed-agents.lib.${system}.makeJailedClaude {
           inherit devshellRoot;
@@ -45,8 +48,18 @@
         })
 
         (jailed-agents.lib.${system}.makeJailedShell {
-          inherit devshellRoot;
+          inherit devshellRoot homeDirectory;
           extraPkgs = [ claude-code ];
+        })
+
+        (jailed-agents.lib.${system}.makeJailedJulia {
+          inherit devshellRoot homeDirectory;
+          extraPkgs = [ ];
+        })
+
+        (jailed-agents.lib.${system}.makeJailedKaimon {
+          inherit devshellRoot homeDirectory;
+          extraPkgs = [ ];
         })
 
       ];
