@@ -129,11 +129,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1782936463,
-        "narHash": "sha256-uFboRoG7fBgdP592N1wcNSA87ohssab6m+VuRxEUnIY=",
+        "lastModified": 1782964450,
+        "narHash": "sha256-2rwNd77TzZ4sDDvMam0IXFXN5IfC35mifoeKS0uAc/4=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "74b38179ac0820af3ea4a240ff12668fb2b8c72e",
+        "rev": "ebc87daabc8d3f595e9a8b67107eaaa8115ad582",
         "type": "github"
       },
       "original": {
@@ -165,15 +165,14 @@
         "nixpkgs": "nixpkgs_2"
       },
       "locked": {
-        "lastModified": 1782960167,
-        "narHash": "sha256-brzvm/ep+zI1nobSw3eaBK3ySTlnTRXgY/GwpXfBYJQ=",
-        "path": "/home/antoine/prog/ai-agent-sandboxing/jailed-agents",
+        "path": "./jailed-agents",
         "type": "path"
       },
       "original": {
-        "path": "/home/antoine/prog/ai-agent-sandboxing/jailed-agents",
+        "path": "./jailed-agents",
         "type": "path"
-      }
+      },
+      "parent": []
     },
     "llm-agents": {
       "inputs": {

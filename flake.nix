@@ -6,7 +6,7 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    jailed-agents.url = "path:/home/antoine/prog/ai-agent-sandboxing/jailed-agents";
+    jailed-agents.url = "path:./jailed-agents";
   };
 
   outputs = { self, nixpkgs, flake-utils, home-manager, jailed-agents, ... }:
@@ -16,17 +16,19 @@
       inherit system;
       config.allowUnfree = true;
     };
+
+    # Variable required to be set to the repository root, containing the current file
     devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
-    devshellUser = "agent";
+    # Variables that can be optionally modified
+    devshellUser       = "agent";
+    devshellHomeFolder = ".home";
+    tmuxServer         = "julia-agent-dev";
+    tmuxSession        = "julia_agents";
 
-    devshellHome = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser; };
-
-    # Minimal tmux server config
-    tmuxServerConf = pkgs.writeText "devshell-tmux.conf" ''
-      set-option -g exit-empty off
-      set-option -g default-shell ${pkgs.zsh}/bin/zsh
-      set-environment -g ZDOTDIR ${devshellRoot}/.home/.config/zsh
-    '';
+    # home manager configuration for tmux, zsh, julia, etc.
+    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder; };
+    homeDirectory = devshellHomeManager.config.home.homeDirectory;
+    configFile = devshellHomeManager.config.xdg.configFile;
 
   in
   {
@@ -36,7 +38,6 @@
         pkgs.zsh
         (pkgs.writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
         (pkgs.writeShellScriptBin "yolo-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
-        (pkgs.writeShellScriptBin "jail_debuging"   ''exec jailed-shell "$@"'')
 
         (jailed-agents.lib.${system}.makeJailedClaude {
           inherit devshellRoot;
@@ -63,18 +64,16 @@
           exit 1
         fi
 
-        export DEVSHELL_ROOT=${pkgs.lib.escapeShellArg devshellRoot}
-        mkdir -p "$DEVSHELL_ROOT/.claude"
+        mkdir -p ${devshellRoot}/.claude
 
         # Activate home-manager config into a local .home dir (never touches real $HOME).
-        mkdir -p "$DEVSHELL_ROOT/.home"
-        HOME="$DEVSHELL_ROOT/.home" USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
-          ${devshellHome.activationPackage}/activate
+        mkdir -p ${homeDirectory}
+        HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
+          ${devshellHomeManager.activationPackage}/activate
 
         # Create or reset the tmux session. -L creates an independant tmux server.
-        tmux -L julia-agent-dev kill-server 2>/dev/null || true
-        tmux -L julia-agent-dev -f ${tmuxServerConf} start-server
-        tmux -L julia-agent-dev new-session -s julia_agents
+        tmux -L ${tmuxServer} kill-server 2>/dev/null || true
+        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -s ${tmuxSession}
       '';
     };
   });

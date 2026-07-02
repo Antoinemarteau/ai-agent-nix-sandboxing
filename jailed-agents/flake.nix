@@ -55,17 +55,16 @@
     # that a writable .claude.json exists both on the host and in the jail.
     withClaudeConfigInit = { name, inner, devshellRoot }: pkgs.writeShellScriptBin name ''
       set -e
-      DEVSHELL_ROOT=${pkgs.lib.escapeShellArg devshellRoot}
       case "$(realpath "$PWD")/" in
-        "$(realpath "$DEVSHELL_ROOT")/"*) ;;
+        "$(realpath "${devshellRoot}")/"*) ;;
         *)
-          echo "${name}: must be run from within $DEVSHELL_ROOT" >&2
+          echo "${name}: must be run from within ${devshellRoot}" >&2
           echo "  current: $PWD" >&2
           exit 1
           ;;
       esac
-      mkdir -p "$DEVSHELL_ROOT/.claude"
-      touch "$DEVSHELL_ROOT/.claude/.claude.json"
+      mkdir -p ${devshellRoot}/.claude
+      touch ${devshellRoot}/.claude/.claude.json
       exec ${inner}/bin/${name}-inner "$@"
     '';
 
