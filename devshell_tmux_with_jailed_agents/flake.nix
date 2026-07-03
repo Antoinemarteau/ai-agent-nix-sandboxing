@@ -61,6 +61,18 @@
           exit 1
         fi
 
+        # Require running from within devshellRoot, to avoid forgeting seting devshellRoot properly
+        _cwd="$(pwd -P)"
+        case "$_cwd/" in
+          "${devshellRoot}/"*) ;;
+          *)
+            echo "ERROR: must be run from within ${devshellRoot}" >&2
+            echo "  current: $_cwd" >&2
+            exit 1
+            ;;
+        esac
+        unset _cwd
+
         # require tmux
         if ! command -v tmux >/dev/null 2>&1; then
           echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
