@@ -4,6 +4,10 @@ if isnothing(Base.find_package("Revise"))
     var"#Pkg".add("Revise")
 end
 
+if isnothing(Base.find_package("Kaimon"))
+    var"#Pkg".add("Kaimon")
+end
+
 if !isfile(joinpath(first(DEPOT_PATH), "bin", "kaimon"))
     var"#Pkg".Apps.add("Kaimon")
 end
