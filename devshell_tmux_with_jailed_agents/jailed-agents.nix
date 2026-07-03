@@ -28,8 +28,8 @@ let
     mount-cwd
     (set-env "USER" devshellUser)
     (set-env "HOME" jailHomeDirectory)
-    # read-only view of agentshome into jail's /home/agents
-    (ro-bind homeDirectory jailHomeDirectory)
+    # writable tmpfs at /home/agents so programs can create transient files (e.g. lock files) in $HOME;
+    (tmpfs jailHomeDirectory)
     (add-pkg-deps commonPkgs)
   ];
 
