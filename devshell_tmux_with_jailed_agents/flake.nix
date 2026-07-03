@@ -51,8 +51,8 @@
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
         (jailedAgents.makeJailedClaude { })
-        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg ]; })
-        (jailedAgents.makeJailedJulia { })
+        (jailedAgents.makeJailedShell { extraPkgs = [ claude-pkg julia-pkg pkgs.python3 ]; })
+        (jailedAgents.makeJailedJulia { extraPkgs = [ pkgs.python3 ]; })
         (jailedAgents.makeJailedKaimon { })
       ];
 
