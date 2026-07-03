@@ -1,3 +1,5 @@
+ENV["PYTHON"] = "python" # For PyCall.jl / Plots
+
 import Pkg as var"#Pkg"
 
 if isnothing(Base.find_package("Revise"))
