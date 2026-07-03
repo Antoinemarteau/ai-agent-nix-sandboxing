@@ -12,10 +12,15 @@ if !isfile(joinpath(first(DEPOT_PATH), "bin", "kaimon"))
     var"#Pkg".Apps.add("Kaimon")
 end
 
-atreplinit() do repl
-    try
-        @eval using Revise
-    catch e
-        @warn "Could not load Revise" exception = e
-    end
+# Kaimon Gate — auto-connect this REPL to the TUI server
+try
+    using Revise
+catch e
+    @info "ℹ Revise not loaded (optional - install with: Pkg.add(\"Revise\"))"
+end
+try
+    using Kaimon
+    Gate.serve()
+catch e
+    @warn "Kaimon Gate failed to start" exception = e
 end
