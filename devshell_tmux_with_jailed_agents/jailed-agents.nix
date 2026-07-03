@@ -1,4 +1,4 @@
-{ pkgs, jail, julia-pkg, claude-pkg, devshellRoot, devshellProjectsFolder, homeDirectory }:
+{ pkgs, jail, julia-pkg, claude-pkg, devshellRoot, devshellProjectsFolder, devshellUser, homeDirectory }:
 
 let
   commonPkgs = with pkgs; [
@@ -46,6 +46,8 @@ let
     (rw-bind (noescape "\"${homeDirectory}/.config/kaimon\"") (noescape "~/.config/kaimon"))
   ];
 
+  jailHomeDirectory = "/home/${devshellUser}";
+
   # script ensuring all jailed programs are launched from within the root directory
   assertInDevshell = name: ''
     set -e
@@ -66,14 +68,14 @@ let
     # linked to a temporary folder (the jail's home). This pre hook makes sure
     # that a writable .claude.json exists both on the host and in the jail.
     touch ${homeDirectory}/.claude/.claude.json
-    exec ${inner}/bin/${name}-inner "$@"
+    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
   '';
 
   withJuliaInit = { name, inner }: pkgs.writeShellScriptBin name ''
     ${assertInDevshell name}
     [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
-    exec ${inner}/bin/${name}-inner "$@"
+    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
   '';
 
   withKaimonInit = { name, inner }: pkgs.writeShellScriptBin name ''
@@ -81,7 +83,7 @@ let
     [ -d ${homeDirectory} ]
     mkdir -p ${homeDirectory}/.cache/kaimon/sock
     mkdir -p ${homeDirectory}/.config/kaimon
-    exec ${inner}/bin/${name}-inner "$@"
+    HOME=${jailHomeDirectory} exec ${inner}/bin/${name}-inner "$@"
   '';
 
   makeJailedShell = { extraPkgs ? [] }:

@@ -36,7 +36,7 @@
     julia-pkg = pkgs.julia-bin;
     claude-pkg = llm-agents.packages.${system}.claude-code;
 
-    jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder homeDirectory; };
+    jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser homeDirectory; };
 
   in
   {
