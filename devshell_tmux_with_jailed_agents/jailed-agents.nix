@@ -51,6 +51,16 @@ let
     (rw-bind "${homeDirectory}/.config/kaimon" "${jailHomeDirectory}/.config/kaimon")
   ];
 
+  # Architecture specific ELF interpreter, e.g. /lib64/ld-linux-x86-64.so.2
+  # for nix-ld support
+  nixLdInterpreterPath = pkgs.lib.removeSuffix "\n" (builtins.readFile "${pkgs.nix-ld}/nix-support/ldpath");
+  nixLdBinds = with jail.combinators; [
+    (ro-bind "${pkgs.nix-ld}/libexec/nix-ld" nixLdInterpreterPath)
+    (add-pkg-deps [ pkgs.glibc pkgs.stdenv.cc.cc pkgs.zlib ])
+    (fwd-env "NIX_LD")
+    (fwd-env "NIX_LD_LIBRARY_PATH")
+  ];
+
   # script ensuring all jailed programs are launched from within the root directory
   assertInDevshell = name: ''
     set -e
@@ -96,7 +106,8 @@ let
         claudeConfigWriteBinds ++
         juliaDepotWriteBinds ++
         kaimonConfigWriteBinds ++
-        kaimonCacheWriteBinds ++ [
+        kaimonCacheWriteBinds ++
+        nixLdBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
     in withClaudeConfigInit { name = "jailed-shell"; inherit inner; };
@@ -115,7 +126,8 @@ let
       inner = jail "jailed-julia-inner" julia-pkg (with jail.combinators;
         commonJailOptions ++
         juliaDepotWriteBinds ++
-        kaimonCacheWriteBinds ++ [
+        kaimonCacheWriteBinds ++
+        nixLdBinds ++ [
           (add-pkg-deps extraPkgs)
         ]);
     in withJuliaInit { name = "jailed-julia"; inherit inner; };

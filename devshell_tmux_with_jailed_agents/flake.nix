@@ -43,6 +43,9 @@
   in
   {
     devShells.default = pkgs.mkShell {
+      NIX_LD = pkgs.stdenv.cc.bintools.dynamicLinker;
+      NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ];
+
       packages = with pkgs; [
         nixd zsh wget gawkInteractive ps gzip unzip gnutar
         (writeShellScriptBin "claude" ''exec jailed-claude "$@"'')
