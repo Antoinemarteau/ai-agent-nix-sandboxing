@@ -8,9 +8,10 @@
     };
     jail-nix.url = "sourcehut:~alexdavid/jail.nix";
     llm-agents.url = "github:numtide/llm-agents.nix";
+    nixconfig.url = "git+ssh://git@github.com/Antoinemarteau/nixconfig";
   };
 
-  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, ... }:
+  outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, nixconfig, ... }:
   flake-utils.lib.eachDefaultSystem (system:
   let
     pkgs = import nixpkgs {
@@ -28,13 +29,14 @@
     tmuxSession            = "julia_agents";
 
     # home manager configuration for tmux, zsh, julia, etc.
-    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder; };
+    devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
     homeDirectory = devshellHomeManager.config.home.homeDirectory;
     configFile = devshellHomeManager.config.xdg.configFile;
 
     jail = jail-nix.lib.init pkgs;
     julia-pkg = pkgs.julia-bin;
     claude-pkg = llm-agents.packages.${system}.claude-code;
+    nvim-pkg = nixconfig.packages.${system}.default;
 
     jailedAgents = import ./jailed-agents.nix { inherit pkgs jail julia-pkg claude-pkg devshellRoot devshellProjectsFolder devshellUser homeDirectory; };
 

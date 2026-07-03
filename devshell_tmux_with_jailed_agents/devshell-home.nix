@@ -1,4 +1,4 @@
-{ pkgs, home-manager, devshellRoot, devshellUser, devshellHomeFolder }:
+{ pkgs, home-manager, devshellRoot, devshellUser, devshellHomeFolder, nvim-pkg }:
 
 home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
@@ -6,6 +6,8 @@ home-manager.lib.homeManagerConfiguration {
     home.username = devshellUser;
     home.homeDirectory = devshellRoot + "/" + devshellHomeFolder;
     home.stateVersion = "25.11";
+
+    home.packages = [ nvim-pkg ];
 
     programs = {
       zsh = {
