@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(./.env)", "Read(./.env.*)", "Read(./**/.env*)",
+      "Read(./secrets/**)", "Read(~/.ssh/**)", "Read(~/.aws/**)",
+      "Read(~/.config/gh/**)", "Read(~/.claude/**)",
+      "Bash(curl:*)", "Bash(wget:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "allow": [
+      "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)",
+      "Bash(ls:*)", "Read(./**)",
+      "Bash(git add *)",
+      "Bash(git fetch *)",
+      "Bash(git switch *)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Bash(git merge *)",
+      "Bash(git rebase *)",
+      "Bash(git branch *)",
+      "Bash(git tag *)"
+    ]
+  }
+}
