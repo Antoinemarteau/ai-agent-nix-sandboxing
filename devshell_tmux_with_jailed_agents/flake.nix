@@ -8,7 +8,7 @@
     };
     jail-nix.url = "sourcehut:~alexdavid/jail.nix";
     llm-agents.url = "github:numtide/llm-agents.nix";
-    nixconfig.url = "git+ssh://git@github.com/Antoinemarteau/nixconfig";
+    nixconfig.url = "github:Antoinemarteau/nixconfig";
   };
 
   outputs = { self, nixpkgs, flake-utils, home-manager, jail-nix, llm-agents, nixconfig, ... }:
