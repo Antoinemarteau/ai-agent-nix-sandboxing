@@ -25,6 +25,29 @@ variable in the top-level flake.nix to the root of the git repository. This
 repository contains the `.claude/` and `.julia/` folders that will be
 given/seen by your sandboxed agents.
 
+### Ubuntu setup
+
+Extra steps are required on Ubuntu that by default [restricts user
+namespaces](https://etbe.coker.com.au/2024/04/24/ubuntu-24-04-bubblewrap/) via
+apparmor.
+A relatively simple and safe solution is to:
+```bash
+sudo apt install apparmor-profiles # install pre-made apparmor profile
+sudo ln -s /usr/share/apparmor/extra-profiles/bwrap-userns-restrict /etc/apparmor.d/ # add one for bubblwrap
+sudo apparmor_parser /etc/apparmor.d/bwrap-userns-restrict. # load it, optionally use -r to reload, or --delete then --add.
+systemctl restart
+```
+
+If this not enough, you can simply do
+```bash
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+but it is [unsafe and
+discouraged](https://gitlab.com/apparmor/apparmor/-/wikis/unprivileged_userns_restriction)
+on personal machine. These are reset to default by setting 1 instead of 0.
+
+
 ## Usage
 
 From the project root, start (or restart) the development environment:
