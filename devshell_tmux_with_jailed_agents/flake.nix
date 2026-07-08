@@ -26,6 +26,7 @@
     devshellHomeFolder     = "agentshome";     # host dir for the jail's home
     devshellProjectsFolder = "projects";       # host dir for the coding projects
     tmuxServer             = "julia_agents";   # tmux server name
+    tmuxSessionFile        = "${devshellRoot}/${devshellHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
 
     # home manager configuration for tmux, zsh, julia, etc.
     devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
@@ -95,16 +96,18 @@
         HOME=${homeDirectory} USER=${devshellUser} HOME_MANAGER_BACKUP_EXT=bak \
           ${devshellHomeManager.activationPackage}/activate
 
-        # Create or reset the tmux session with its default window layout.
+        # Create or reset the tmux session, then apply the user-editable window
+        # layout. @proj is the project dir.
+        _layout="${tmuxSessionFile}"
+        if [ ! -f "$_layout" ]; then
+          echo "ERROR: tmux session file not found: $_layout" >&2
+          exit 1
+        fi
         tmux -L ${tmuxServer} kill-session -t "=$_session" 2>/dev/null || true
-        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -n shell -c "$_cwd"
-        tmux -L ${tmuxServer} new-window     -t "$_session" -n claude -c "$_cwd"
-        tmux -L ${tmuxServer} new-window     -t "$_session" -n kaimon -c "$_cwd"
-        tmux -L ${tmuxServer} send-keys      -t "$_session:kaimon" jailed-kaimon C-m
-        tmux -L ${tmuxServer} new-window     -t "$_session" -n repl -c "$_cwd"
-        tmux -L ${tmuxServer} send-keys      -t "$_session:repl" jailed-julia C-m
-        tmux -L ${tmuxServer} select-window  -t "$_session:shell"
-        unset _cwd
+        tmux -L ${tmuxServer} -f ${configFile."tmux/tmux.conf".source} new-session -d -s "$_session" -c "$_cwd"
+        tmux -L ${tmuxServer} set-option  -t "$_session" @proj "$_cwd"
+        tmux -L ${tmuxServer} source-file -t "$_session:" "$_layout"
+        unset _cwd _layout
         tmux -L ${tmuxServer} attach-session -t "$_session"
       '';
     };
