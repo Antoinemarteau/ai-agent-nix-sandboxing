@@ -74,84 +74,89 @@ let
     esac
   '';
 
-  withClaudeConfigInit = { name, inner }: pkgs.writeShellScriptBin name ''
-    ${assertInDevshell name}
-    # .claude.json needs to be created within the jail to be valid, but it is
-    # linked to a temporary folder (the jail's home). This pre hook makes sure
-    # that a writable .claude.json exists both on the host and in the jail.
-    touch ${homeDirectory}/.claude.json
-    exec ${inner}/bin/${name}-inner "$@"
-  '';
-
-  withJuliaInit = { name, inner }: pkgs.writeShellScriptBin name ''
-    ${assertInDevshell name}
-    [ -d ${homeDirectory} ]
-    mkdir -p ${homeDirectory}/.cache/kaimon/sock
-    exec ${inner}/bin/${name}-inner "$@"
-  '';
-
-  withKaimonInit = { name, inner }: pkgs.writeShellScriptBin name ''
-    ${assertInDevshell name}
-    [ -d ${homeDirectory} ]
-    mkdir -p ${homeDirectory}/.cache/kaimon/sock
-    mkdir -p ${homeDirectory}/.config/kaimon
-    exec ${inner}/bin/${name}-inner "$@"
-  '';
+  makeJailed ={ name, program, preHook ? "", network ? false, options ? [], extraPkgs ? [] }:
+    let
+      inner = jail "${name}-inner" program (
+        commonJailOptions ++
+        pkgs.lib.optionals network [ jail.combinators.network ] ++
+        options ++
+        [ (jail.combinators.add-pkg-deps extraPkgs) ]);
+    in pkgs.writeShellScriptBin name ''
+      ${assertInDevshell name}
+      ${preHook}
+      exec ${inner}/bin/${name}-inner "$@"
+    '';
 
   makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
-    let
-      inner = jail "${name}-inner" pkgs.bashInteractive (with jail.combinators;
-        commonJailOptions ++
-        [ network ] ++
+    makeJailed {
+      inherit name extraPkgs;
+      program = pkgs.bashInteractive;
+      network = true;
+      preHook = ''
+        # .claude.json needs to be created within the jail to be valid, but it is
+        # linked to a temporary folder (the jail's home). This pre hook makes sure
+        # that a writable .claude.json exists both on the host and in the jail.
+        touch ${homeDirectory}/.claude.json
+      '';
+      options = with jail.combinators;
         claudeConfigWriteBinds ++
         juliaDepotWriteBinds ++
         kaimonConfigWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
-          (add-pkg-deps extraPkgs)
-        ]);
-    in withClaudeConfigInit { inherit name inner; };
+        ];
+    };
 
   makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude" }:
-    let
-      inner = jail "${name}-inner" claude-pkg (with jail.combinators;
-        commonJailOptions ++
-        [ network ] ++
-        claudeConfigWriteBinds ++ [
-          (add-pkg-deps extraPkgs)
-        ]);
-    in withClaudeConfigInit { inherit name inner; };
+    makeJailed {
+      inherit name extraPkgs;
+      program = claude-pkg;
+      network = true;
+      preHook = ''
+        touch ${homeDirectory}/.claude.json
+      '';
+      options = claudeConfigWriteBinds;
+    };
 
   makeJailedJulia = { extraPkgs ? [], network ? false, name ? "jailed-julia" }:
-    let
-      inner = jail "${name}-inner" julia-pkg (with jail.combinators;
-        commonJailOptions ++
-        (if network then [ jail.combinators.network ] else []) ++
+    makeJailed {
+      inherit name extraPkgs network;
+      program = julia-pkg;
+      preHook = ''
+        [ -d ${homeDirectory} ]
+        mkdir -p ${homeDirectory}/.cache/kaimon/sock
+      '';
+      options = with jail.combinators;
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
-          (add-pkg-deps extraPkgs)
-        ]);
-    in withJuliaInit { inherit name inner; };
+        ];
+    };
 
   makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
     let
       kaimonLauncher = pkgs.writeShellScriptBin "kaimon" ''
         exec ~/.julia/bin/kaimon "$@"
       '';
-      inner = jail "${name}-inner" kaimonLauncher (with jail.combinators;
-        commonJailOptions ++
-        [ network ] ++
+    in makeJailed {
+      inherit name extraPkgs;
+      program = kaimonLauncher;
+      network = true;
+      preHook = ''
+        [ -d ${homeDirectory} ]
+        mkdir -p ${homeDirectory}/.cache/kaimon/sock
+        mkdir -p ${homeDirectory}/.config/kaimon
+      '';
+      options = with jail.combinators;
         juliaDepotWriteBinds ++
         kaimonCacheWriteBinds ++
         kaimonConfigWriteBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps [ julia-pkg ])
-          (add-pkg-deps extraPkgs)
-        ]);
-    in withKaimonInit { inherit name inner; };
+        ];
+    };
 
 in {
   inherit makeJailedClaude makeJailedShell makeJailedJulia makeJailedKaimon;
