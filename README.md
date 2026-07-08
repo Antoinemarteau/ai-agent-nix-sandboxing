@@ -124,7 +124,12 @@ On the first session you ever create, you need to:
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
 
 To return to the development session later, do not re-run `new_agent_session`
-(it kills and recreates the session and all existing agents), but:
+(it kills and recreates the session and all existing agents), but from the
+project folder:
+```bash
+attach_agent_session
+```
+which re-attaches the session named after the current folder. Or, manually:
 ```bash
 tmux -L julia_agents ls # see live sessions
 tmux -L julia_agents attach -t <session>

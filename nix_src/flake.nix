@@ -100,6 +100,23 @@
       tmux -L ${tmuxServer} attach-session -t "$_session"
     '';
 
+    attachAgentSession = pkgs.writeShellScriptBin "attach_agent_session" ''
+      _session="$(basename "$(pwd -P)")"
+      _session="''${_session//[^a-zA-Z0-9_-]/_}"
+
+      # Refuse to attach inside another tmux session — attach cannot nest.
+      if [ -n "''${TMUX:-}" ]; then
+        echo "ERROR: cannot attach within a tmux session — detach first (Ctrl-b d)" >&2
+        exit 1
+      fi
+
+      if ! tmux -L ${tmuxServer} has-session -t "=$_session" 2>/dev/null; then
+        echo "ERROR: no tmux session '$_session' for this folder — start one with new_agent_session" >&2
+        exit 1
+      fi
+      tmux -L ${tmuxServer} attach-session -t "=$_session"
+    '';
+
     # Directories the sandboxed agents can write to. Keep the interactive
     # shell's own startup files (e.g. agentshome/.config/zsh) OUT of this set
     # — they must never become agent-writable.
@@ -160,6 +177,7 @@
         (jailedAgents.makeJailedKaimon { })
 
         newAgentSession
+        attachAgentSession
       ]
       ++ builtins.map guardHostTool guardedHostTools;
     };
