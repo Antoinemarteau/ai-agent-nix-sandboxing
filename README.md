@@ -31,7 +31,7 @@ This repository has the following structure:
 │   │   └── tmux/default-session.conf # default tmux session layout
 │   └── .julia/         # agent specific julia folder
 │       └── startup.jl
-├── devshell_tmux_with_jailed_agents/ # nix code for the development environment
+├── nix_src/            # nix code for the development environment
 ├── .envrc              # direnv config. (automatically activate dev. environment)
 └── README.md
 ```
@@ -40,7 +40,7 @@ Clone the repository. Change the hard-coded
 ```nix
 devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
 ```
-variable in the `devshell_tmux_with_jailed_agents/flake.nix` file, to the
+variable in the `nix_src/flake.nix` file, to the
 actual absolute path of the local folder the repo was cloned in.
 
 Then enable `direnv` for the checked-in `.envrc`, from the repository root
@@ -97,7 +97,7 @@ new_agent_session
 ```
 On a host without `direnv`, load the environment first and then launch a session:
 ```bash
-nix develop <devshellRoot>/devshell_tmux_with_jailed_agents
+nix develop <devshellRoot>/nix_src
 new_agent_session
 ```
 

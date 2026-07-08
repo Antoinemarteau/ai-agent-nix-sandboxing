@@ -71,7 +71,7 @@
 
       # The session windows launch jailed agents from PATH; ensure the devShell env is loaded.
       if ! command -v jailed-kaimon >/dev/null 2>&1; then
-        echo "ERROR: devShell tools not on PATH — enter the env first (direnv, or 'nix develop ${devshellRoot}/devshell_tmux_with_jailed_agents')" >&2
+        echo "ERROR: devShell tools not on PATH — enter the env first (direnv, or 'nix develop ${devshellRoot}/nix_src')" >&2
         exit 1
       fi
 
