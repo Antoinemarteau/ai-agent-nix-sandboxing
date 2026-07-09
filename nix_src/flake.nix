@@ -32,6 +32,7 @@
     devshellHomeManager = import ./devshell-home.nix { inherit pkgs home-manager devshellRoot devshellUser devshellHomeFolder nvim-pkg; };
     homeDirectory = devshellHomeManager.config.home.homeDirectory;
     configFile = devshellHomeManager.config.xdg.configFile;
+    tmux-pkg = devshellHomeManager.config.programs.tmux.package;
 
     jail = jail-nix.lib.init pkgs;
     julia-pkg = pkgs.julia-bin;
@@ -63,12 +64,6 @@
       esac
       _session="$(basename "$_cwd")"
       _session="''${_session//[^a-zA-Z0-9_-]/_}"
-
-      # require tmux
-      if ! command -v tmux >/dev/null 2>&1; then
-        echo "ERROR: tmux is not installed on the host — install it via your OS package manager" >&2
-        exit 1
-      fi
 
       # The session windows launch jailed agents from PATH; ensure the devShell env is loaded.
       if ! command -v jailed-kaimon >/dev/null 2>&1; then
@@ -166,6 +161,7 @@
       NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [ pkgs.stdenv.cc.cc pkgs.zlib ];
 
       packages = with pkgs; [
+        tmux-pkg
         nixd zsh wget gawkInteractive ps gzip unzip gnutar
         (writeShellScriptBin "yolo-jailed-claude" ''exec jailed-claude --dangerously-skip-permissions "$@"'')
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')

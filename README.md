@@ -16,9 +16,9 @@ agent can be given full privilege.
 
 ## Setup
 
-Before starting, you will need [`nix`](https://nixos.org/download/),
-[`tmux`](https://github.com/tmux/tmux/wiki/installing) and
-optionally [`direnv`](https://direnv.net/) installed on your machine.
+Before starting, you will need [`nix`](https://nixos.org/download/) and
+optionally [`direnv`](https://direnv.net/) (recommended) installed on your
+machine.
 
 This repository has the following structure:
 ```
