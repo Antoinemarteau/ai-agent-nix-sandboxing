@@ -143,7 +143,7 @@ let
   makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
     makeJailed {
       inherit name extraPkgs;
-      program = pkgs.bashInteractive;
+      program = pkgs.zsh;
       network = true;
       preHook = ''
         # makes sure a writable and host persisted .claude.json file exists
@@ -159,6 +159,11 @@ let
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
+          (ro-bind "${homeDirectory}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+          (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
+          (set-env "LANG" "C.UTF-8")
+          (set-env "TERMINFO_DIRS" "${pkgs.ncurses}/share/terminfo")
+          (add-pkg-deps [ pkgs.zsh pkgs.ncurses ])
         ];
     };
 
