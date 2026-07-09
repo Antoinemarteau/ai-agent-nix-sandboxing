@@ -95,7 +95,7 @@ let
       network = true;
       preHook = ''
         # makes sure a writable and host persisted .claude.json file exists
-        [ -f test.json ] || echo '{}' > ${homeDirectory}/.claude.json
+        [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
       '';
       options = claudeConfigWriteBinds;
     };
@@ -147,7 +147,7 @@ let
       network = true;
       preHook = ''
         # makes sure a writable and host persisted .claude.json file exists
-        [ -f test.json ] || echo '{}' > ${homeDirectory}/.claude.json
+        [ -f ${homeDirectory}/.claude.json ] || echo '{}' > ${homeDirectory}/.claude.json
         # similar with Kaimon config folders
         mkdir -p ${homeDirectory}/.cache/kaimon/sock
         mkdir -p ${homeDirectory}/.config/kaimon
