@@ -139,7 +139,7 @@
           "$(${pkgs.coreutils}/bin/realpath -m "$_t")/"*)
             echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
             echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
-            echo "   Use the jailed tools, or run '${name}' from inside `jailed-shell`, or from outside the sandbox after reviewing the diff." >&2
+            echo "   Use the jailed tools, or run '${name}' from inside 'jailed-shell', or from outside the sandbox after reviewing the diff." >&2
             exit 1 ;;
         esac
       done
