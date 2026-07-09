@@ -88,35 +88,14 @@ let
       exec ${inner}/bin/${name}-inner "$@"
     '';
 
-  makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
-    makeJailed {
-      inherit name extraPkgs;
-      program = pkgs.bashInteractive;
-      network = true;
-      preHook = ''
-        # .claude.json needs to be created within the jail to be valid, but it is
-        # linked to a temporary folder (the jail's home). This pre hook makes sure
-        # that a writable .claude.json exists both on the host and in the jail.
-        touch ${homeDirectory}/.claude.json
-      '';
-      options = with jail.combinators;
-        claudeConfigWriteBinds ++
-        juliaDepotWriteBinds ++
-        kaimonConfigWriteBinds ++
-        kaimonCacheWriteBinds ++
-        nixLdBinds ++ [
-          (share-ns "pid") # required for Kaimon <-> Julia servers comm.
-        ];
-    };
-
   makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude" }:
     makeJailed {
       inherit name extraPkgs;
       program = claude-pkg;
       network = true;
       preHook = ''
-        touch       ${homeDirectory}/.claude.json
-        echo '{}' > ${homeDirectory}/.claude.json # avoid invalid json bug
+        # makes sure a writable and host persisted .claude.json file exists
+        [ -f test.json ] || echo '{}' > ${homeDirectory}/.claude.json
       '';
       options = claudeConfigWriteBinds;
     };
@@ -157,6 +136,29 @@ let
         kaimonConfigWriteBinds ++ [
           (share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps [ julia-pkg ])
+        ];
+    };
+
+  # This is for working within project folders and debugging the jails
+  makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
+    makeJailed {
+      inherit name extraPkgs;
+      program = pkgs.bashInteractive;
+      network = true;
+      preHook = ''
+        # makes sure a writable and host persisted .claude.json file exists
+        [ -f test.json ] || echo '{}' > ${homeDirectory}/.claude.json
+        # similar with Kaimon config folders
+        mkdir -p ${homeDirectory}/.cache/kaimon/sock
+        mkdir -p ${homeDirectory}/.config/kaimon
+      '';
+      options = with jail.combinators;
+        claudeConfigWriteBinds ++
+        juliaDepotWriteBinds ++
+        kaimonConfigWriteBinds ++
+        kaimonCacheWriteBinds ++
+        nixLdBinds ++ [
+          (share-ns "pid") # required for Kaimon <-> Julia servers comm.
         ];
     };
 
