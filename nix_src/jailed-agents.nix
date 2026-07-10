@@ -3,6 +3,7 @@
 let
   commonPkgs = with pkgs; [
     bashInteractive
+    less
     curl
     # wget          # redundant with curl
     jq
