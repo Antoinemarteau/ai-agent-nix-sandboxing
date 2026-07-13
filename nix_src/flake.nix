@@ -30,6 +30,10 @@
     tmuxServer             = "julia_agents";   # tmux server name
     tmuxSessionFile        = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
 
+    # Network whitelists
+    claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
+    juliaAllowedDomains  = [ "julialang.org" "github.com" "githubusercontent.com" ];
+
     # home manager configuration for the interactive devshell home (tmux, zsh, julia,
     # etc.), activated into <devshellRoot>/.hosthome. Kept out of agentshome so no host
     # dotfiles live in a tree that is bound into the jails.
@@ -173,6 +177,7 @@
           extraPkgs = [ mcp-nixos ];
           extraArgs = "--dangerously-skip-permissions";
           restrictNetwork = true;
+          allowedDomains = claudeAllowedDomains;
         })
         (jailedAgents.makeJailedClaude {
           name = "yolo-jailed-claude";
@@ -183,8 +188,15 @@
           extraPkgs = [
             claude-pkg julia-pkg python3 gh mcp-nixos man less ];
         })
-        (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; })
-        (jailedAgents.makeJailedJulia { extraPkgs = [ python3 ]; network = true; name = "jailed-julia-net"; })
+        (jailedAgents.makeJailedJulia {
+          extraPkgs = [ python3 ];
+          allowedDomains = juliaAllowedDomains;
+        })
+        (jailedAgents.makeJailedJulia {
+          extraPkgs = [ python3 ];
+          name = "yolo-jailed-julia";
+          restrictNetwork = false;
+        })
         (jailedAgents.makeJailedKaimon { })
 
         newAgentSession

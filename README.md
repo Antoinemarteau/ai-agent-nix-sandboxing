@@ -108,8 +108,8 @@ This creates a tmux session with 4 windows:
 This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.
 
 On the first session you ever create, `.julia` and other configs are empty, so you need to:
-- Launch `jailed-julia-net` so that `startup.jl` installs Kaimon (`jailed-julia` has no internet)
-- Launch `jailed-kaimon` to setup Kaimon, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed)
+- Go to the repl window and wait Kaimon install to be finished.
+- Go to kaimon window and launch `jailed-kaimon` to setup it, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed)
 - Run `claude-connect-kaimon` from the shell to connect the MCP
 - Launch `jailed-claude`
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
