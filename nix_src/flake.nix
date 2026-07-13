@@ -166,7 +166,7 @@
   {
     devShells.default = pkgs.mkShell {
       packages = with pkgs; [
-        tmux-pkg nixd zsh wget gawkInteractive ps gzip unzip gnutar
+        tmux-pkg zsh
         (writeShellScriptBin "claude-connect-kaimon" ''exec jailed-claude mcp add --transport http --scope user kaimon http://localhost:2828/mcp'')
 
         # jailed-claude: claude-code with skip permission and restricted network
