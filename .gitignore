@@ -1,5 +1,5 @@
 # direnv temp file
-/.direnv/
+/agentshome/.direnv/
 /.hosthome/
 
 # git HTTPS credential (secret)

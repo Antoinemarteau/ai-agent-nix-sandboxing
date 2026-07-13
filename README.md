@@ -9,20 +9,20 @@ and safer manner, on local machine or remotely controlled via ssh.
 It has the following structure:
 ```sh
 .   # everyday development folders
-├── projects/           # Folder containing all development projects
-├── agentshome/         # agent data (partially) forwarded to the sandboxes
-│   ├── .claude/        # agent specific Claude config
+├── agentshome/      # single agent-writeable root (agent data + projects)
+│   ├── projects/    # Folder containing all development projects
+│   ├── .envrc       # direnv config. (automatically activate dev. environment on cd)
+│   ├── .claude/     # agent specific Claude config
 │   ├── .config/
 │   │   ├── kaimon/
-│   │   └── zsh/        # sandboxed shell config
-│   └── .julia/         # agent specific julia folder
+│   │   └── zsh/     # sandboxed shell config
+│   └── .julia/      # agent specific julia folder
 │       └── startup.jl
 │
 │   # dev. environment definition and personalization
-├── nix_src/            # nix code for the development environment
-├── .envrc              # direnv config. (automatically activate dev. environment)
-├─ README.md
-└── .hosthome/          # out-of-sandbox shell personalization
+├── nix_src/         # nix code for the development environment
+├── README.md
+└── .hosthome/       # out-of-sandbox shell personalization
     └── .config/
        └── tmux/default-session.conf # user-editable tmux session layout
 ```
@@ -31,9 +31,9 @@ objective of this repo is that everything else is automatically installed in a
 reproducible way upon cloning it, except what's in `.julia` and `.claude`
 folders config and your projects, that you populate yourself.
 
-The sandboxes can be run from an unprivileged environment, still the sandboxed
-agent can be given full privilege. The sandboxed coding tools can only write
-into `projects/` and parts of `agentshome/`.
+The sandboxes can be run from an unprivileged environment (although root
+privilege is needed to install `nix` and `direnv`). The sandboxed coding tools
+can only write into `agentshome/` (which holds `projects/` and the agent data).
 
 > [!WARNING]
 > I have no security background training, there is no security guarantee. I would only
@@ -54,12 +54,13 @@ devshellRoot = "/home/antoine/prog/ai-agent-sandboxing";
 ```
 variable in the `nix_src/flake.nix` file, to the actual absolute path the repo.
 
-Then enable `direnv` for the repo from its root
+Then enable `direnv` from within `agentshome/`
 ```bash
+cd agentshome
 direnv allow
 ```
-Entering any project under `projects/` now puts the sandboxed tools on `PATH`
-automatically.
+Entering any project under `agentshome/projects/` now puts the sandboxed tools on
+`PATH` automatically.
 
 If `nix-direnv` is not installed on the machine, install it at user level for
 faster cached reloads (optional but recommended)
@@ -78,15 +79,19 @@ denied`. To fix it, run
 sudo cp nix_src/apparmor/bwrap-userns-restrict /etc/apparmor.d/
 sudo apparmor_parser -r -W /etc/apparmor.d/bwrap-userns-restrict
 ```
+This apparmor config for bwrap is the same as the [default official bwrap
+userns profile,
+](https://gitlab.com/apparmor/apparmor/-/blob/master/profiles/apparmor/profiles/extras/bwrap-userns-restrict)
+except it also works for the nix provided bwrap binaries.
 
 
 ## Usage
 
 Create a project directory, clone what you need, `cd` into.
 ```bash
-mkdir projects/my_project
-git clone <url> projects/my_project # don't do that from within projects/
-cd projects/my_project
+mkdir agentshome/projects/my_project
+git clone <url> agentshome/projects/my_project # don't do that from within agentshome/
+cd agentshome/projects/my_project
 ```
 
 Then, from the project folder, start (or restart) the `tmux` development session
@@ -100,22 +105,23 @@ new_agent_session
 ```
 
 This creates a tmux session with 4 windows:
-- kaimon: automatically runs sandboxed Kaimon CLI, `jailed-kaimon`
-- shell: an un-sandboxed terminal. You can get a sandboxed one using `jailed-shell`
-- claude: to run sandboxed claude-code CLI, `jailed-claude` or `yolo-jailed-claude`
-- repl: automatically runs sandboxed Julia REPL serving Kaimon, `jailed-julia`
+- kaimon: runs sandboxed Kaimon CLI, `jailed-kaimon`
+- shell: runs a sandboxed terminal, `jailed-shell`
+- claude: runs sandboxed claude-code CLI `jailed-claude`
+- repl: runs sandboxed Julia REPL serving Kaimon, `jailed-julia`
 
 This default session can be personalized by modifying `.hosthome/.config/tmux/default-session.conf`.
 
 On the first session you ever create, `.julia` and other configs are empty, so you need to:
 - Go to the repl window and wait Kaimon install to be finished.
 - Go to kaimon window and launch `jailed-kaimon` to setup it, choose "Lax" mode (filtering who acceses Kaimon is pointless since it is sandboxed)
-- Run `claude-connect-kaimon` from the shell to connect the MCP
-- Launch `jailed-claude`
+- Exit Claude, run `claude-connect-kaimon` from the shell to connect the MCP
+- launch `jailed-claude` again (or `yolo-jailed-claude`) and login
 Claude should then be ready to pass Kaimon's `usage_quiz` and read `usage_instructions`.
+By default, Claude's login info should be stored in `agentshome/.claude/.credentials.json`.
 
-On remote machine, `yolo-jailed-claude` can be used, it's basically an alias to
-`jailed-claude --dangerously-skip-permissions`.
+On remote machine, `yolo-jailed-claude` can be used, it is a directory jailed
+Claude with unrestricted network access.
 
 To return to the development session later, do not re-run `new_agent_session`
 (it kills and recreates the session and all existing agents), but
@@ -139,18 +145,19 @@ another sub-project.
 
 ## Security warning
 
-If you let Claude have strong permission (either permissive permissions or
-"yolo" mode), treat `projects/` and `agentshome/` as untrusted: development
-tools that may run arbitrary code from files added in these folders (e.g. `git`
-with .git/ hooks) should not be used within them.
+This development environment gives Claude strong permission
+(--dangerously-skip-permisson) by default. Treat the whole `agentshome/` tree
+(agent data and `projects/`) as untrusted: development tools that may run
+arbitrary code from files added in these folders (e.g. `git` with .git/ hooks)
+should not be used within them.
 
 As a guard against that mistake, a list of common host dev tools — `git`, `gh`,
 `julia`, `claude`, `kaimon`, `make`, `python`, `pip`, `uv`, `conda`, `node`,
 `npm`, `docker`, `apt` (see `guardedHostTools` in `flake.nix`) — is shadowed
-inside the devShell: they refuse to run within an agent-writable tree
-(`projects/` and some `agentshome/` sub-dirs). It is a footgun-reducer, not a
-security boundary: not all dev tools are shadowed, and absolute paths
-(`/usr/bin/git`) or tools that embed git (libgit2, `gh`) bypass it.
+inside the devShell: they refuse to run anywhere under the `agentshome/` tree.
+It is a footgun-reducer, not a security boundary: not all dev tools are
+shadowed, and absolute paths (`/usr/bin/git`) or tools that embed git (libgit2,
+`gh`) bypass it.
 
 
 ### Git identity and GitHub token

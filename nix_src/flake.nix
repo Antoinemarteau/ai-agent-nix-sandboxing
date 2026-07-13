@@ -25,7 +25,7 @@
     devshellUser           = "agents";         # username in the jail
     devshellHomeFolder     = "agentshome";     # host dir holding the jail-bound agent data
     devshellHostHomeFolder = ".hosthome";       # host dir for the interactive devshell home (zsh/tmux/nvim)
-    devshellProjectsFolder = "projects";       # host dir for the coding projects
+    devshellProjectsFolder = "${devshellHomeFolder}/projects"; # host dir for the coding projects (under the agent home)
     agentHomeDirectory = "${devshellRoot}/${devshellHomeFolder}";
     tmuxServer             = "julia_agents";   # tmux server name
     tmuxSessionFile        = "${devshellRoot}/${devshellHostHomeFolder}/.config/tmux/default-session.conf"; # user-editable window layout
@@ -53,7 +53,7 @@
     # explicit entry point: entering the devShell (via direnv or `nix develop`) only puts
     # the tools on PATH — running this builds and attaches the session.
     newAgentSession = pkgs.writeShellScriptBin "new_agent_session" ''
-      # Require running from within <devshellRoot>/projects, where the jailed agents operate.
+      # Require running from within the projects dir, where the jailed agents operate.
       _projects="${devshellRoot}/${devshellProjectsFolder}"
       if [ ! -d "$_projects" ]; then
         echo "ERROR: devshellRoot in flake.nix is '${devshellRoot}'," >&2
@@ -120,33 +120,22 @@
       tmux -L ${tmuxServer} attach-session -t "=$_session"
     '';
 
-    # Directories the sandboxed agents can write to. The interactive devshell home
+    # Shadow a host dev tool inside the agent-writable tree (agentHomeDirectory, which
+    # holds the jail-bound agent data and the projects). The interactive devshell home
     # lives in a separate tree (.hosthome/), so its startup files can never become
-    # agent-writable.
-    agentWritableDirs = [
-      "${devshellRoot}/${devshellProjectsFolder}"
-      "${agentHomeDirectory}/.claude"
-      "${agentHomeDirectory}/.julia"
-      "${agentHomeDirectory}/.cache/kaimon"
-      "${agentHomeDirectory}/.config/kaimon"
-    ];
-
-    # Shadow a host dev tool in agent writable directories. This is a
-    # footgun-reducer, NOT a security boundary: absolute paths (/usr/bin/git)
-    # and tools that use git without exec'ing it (libgit2, gh's internal git)
-    # bypass it.
+    # agent-writable. This is a footgun-reducer, NOT a security boundary: absolute paths
+    # (/usr/bin/git) and tools that use git without exec'ing it (libgit2, gh's internal
+    # git) bypass it.
     guardHostTool = name: pkgs.writeShellScriptBin name ''
       _cwd="$(${pkgs.coreutils}/bin/pwd -P)/"
-      for _t in ${pkgs.lib.escapeShellArgs agentWritableDirs}; do
-        case "$_cwd" in
-          "$(${pkgs.coreutils}/bin/realpath -m "$_t")/"*)
-            echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
-            echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
-            echo "   Use the jailed tools, or run '${name}' from inside 'jailed-shell', or from outside the sandbox after reviewing the diff." >&2
-            exit 1 ;;
-        esac
-      done
-      # Outside any agent-writable tree: hand off to the real host tool (skip this wrapper).
+      case "$_cwd" in
+        "$(${pkgs.coreutils}/bin/realpath -m "${agentHomeDirectory}")/"*)
+          echo "⛔ '${name}' is disabled here: this tree is written by the sandboxed agents." >&2
+          echo "   Running host '${name}' could execute agent-planted hooks/config on your host." >&2
+          echo "   Use the jailed tools, or run '${name}' from inside 'jailed-shell', or from outside the sandbox after reviewing the diff." >&2
+          exit 1 ;;
+      esac
+      # Outside the agent-writable tree: hand off to the real host tool (skip this wrapper).
       readarray -t _paths < <(type -aP ${name})
       _real="''${_paths[1]:-}"
       if [ -z "$_real" ]; then
