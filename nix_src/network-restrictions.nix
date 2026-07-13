@@ -1,7 +1,7 @@
 { pkgs, jail, jailHomeDirectory, homeDirectory }:
 
 let
-  inherit (pkgs.lib) getExe;
+  inherit (pkgs.lib) getExe getExe';
 
   cacertBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
 
@@ -15,9 +15,10 @@ in rec {
   # deny-all egress) and reaches the outside world only through a host-side allowlist
   # proxy, bridged in over a unix socket by an in-jail socat.
 
-  # The allowlist is enforced by tinyproxy. One instance runs per restricted jail on the
-  # host (host netns, real DNS); tinyproxy speaks TCP only, so it is bridged into the
-  # jail's empty netns over a bound unix socket (see jailNetProxy).
+  # The allowlist is enforced by tinyproxy. One instance runs on the host (host netns, real
+  # DNS) per restricted-jail *process*, so several instances of the same jail can run at
+  # once; tinyproxy speaks TCP only, so it is bridged into the jail's empty netns over a
+  # per-instance bound unix socket (see jailNetProxy and makeJailed).
 
   proxyPort = 3128;                           # in-jail TCP that HTTP(S)_PROXY targets
   jailProxySock = "/run/jail-net/proxy.sock"; # host proxy socket, bound into the jail here
@@ -31,33 +32,47 @@ in rec {
       (d: "(^|\\.)" + (builtins.replaceStrings [ "." ] [ "\\." ] d) + "$")
       domains + "\n");
 
-  mkProxyConfFile = name: hostPort: domains: pkgs.writeText "${name}-tinyproxy.conf" ''
-    Port ${toString hostPort}
-    Listen 127.0.0.1
-    Timeout 600
-    MaxClients 100
-    LogLevel Notice
-    FilterDefaultDeny Yes
-    Filter "${mkProxyFilterFile name domains}"
-    FilterType ere
-    FilterCaseSensitive Off
-    ConnectPort 443
-    ConnectPort 80
-  '';
-
-  # Host-side launcher (args: SOCKET CONF PORT): start tinyproxy for a jail, then expose
-  # it on the bound unix socket with socat (tinyproxy speaks TCP only). Runs in the
-  # foreground; when the wrapper kills it, the trap tears down both children. Exits as
-  # soon as either child dies, so the wrapper's liveness check notices a dead proxy.
+  # Host-side launcher (args: SOCKET FILTER PORT): run one tinyproxy for a jail instance
+  # on 127.0.0.1:PORT with the given (build-time, store) allowlist FILTER, then expose it
+  # on the bound unix SOCKET via socat (tinyproxy speaks TCP only). The tiny conf wrapper
+  # is built here at runtime because PORT is chosen per instance (so several instances of
+  # the same jail can run at once). The socket is created only AFTER tinyproxy is confirmed
+  # listening, so its existence signals readiness to the caller (which retries on a port
+  # clash). Runs in the foreground; the trap tears down both children and the temp conf.
   jailNetProxy = pkgs.writeShellScriptBin "jail-net-proxy" ''
     set -eu
-    _sock="$1"; _conf="$2"; _port="$3"
+    _sock="$1"; _filter="$2"; _port="$3"
+    _tp=""; _so=""
+    _dir="$(${getExe' pkgs.coreutils "mktemp"} -d)"
+    trap 'kill $_tp $_so 2>/dev/null || true; ${getExe' pkgs.coreutils "rm"} -rf "$_dir"' EXIT INT TERM
+
+    _conf="$_dir/tinyproxy.conf"
+    {
+      printf 'Port %s\n'            "$_port"
+      printf 'Listen 127.0.0.1\n'
+      printf 'Timeout 600\n'
+      printf 'MaxClients 100\n'
+      printf 'LogLevel Notice\n'
+      printf 'FilterDefaultDeny Yes\n'
+      printf 'Filter "%s"\n'        "$_filter"
+      printf 'FilterType ere\n'
+      printf 'FilterCaseSensitive Off\n'
+      printf 'ConnectPort 443\n'
+      printf 'ConnectPort 80\n'
+    } > "$_conf"
+
     ${getExe pkgs.tinyproxy} -d -c "$_conf" &
     _tp=$!
-    rm -f "$_sock"
+    # Wait until tinyproxy is accepting on its port, or has died (e.g. the port was taken).
+    _w=0
+    until (exec 3<>/dev/tcp/127.0.0.1/"$_port") 2>/dev/null; do
+      kill -0 "$_tp" 2>/dev/null || exit 1
+      [ "$_w" -gt 100 ] && exit 1
+      _w=$((_w + 1)); sleep 0.05
+    done
+    ${getExe' pkgs.coreutils "rm"} -f "$_sock"
     ${getExe pkgs.socat} UNIX-LISTEN:"$_sock",fork,reuseaddr TCP:127.0.0.1:"$_port" &
     _so=$!
-    trap 'kill "$_tp" "$_so" 2>/dev/null' EXIT INT TERM
     wait -n
   '';
 

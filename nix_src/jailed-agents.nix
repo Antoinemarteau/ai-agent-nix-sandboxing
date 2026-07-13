@@ -28,7 +28,7 @@ let
 
   net = import ./network-restrictions.nix { inherit pkgs jail jailHomeDirectory homeDirectory; };
   inherit (net)
-    jailNetProxy mkProxyConfFile jailProxySock proxyClientLeg kaimonClientLeg kaimonServerLeg
+    jailNetProxy mkProxyFilterFile jailProxySock proxyClientLeg kaimonClientLeg kaimonServerLeg
     restrictedNetOptions kaimonBridgeBinds localhostResolveBinds;
 
   # Build a jail launcher: run the given in-jail socat leg snippets, then exec the program.
@@ -100,10 +100,12 @@ let
   # for this jail on a unix socket bound in at jailProxySock, and tear it down when
   # the jail exits.
   makeJailed = { name, program, preHook ? "", network ? false, options ? [], extraPkgs ? [],
-                 proxyDomains ? null, proxyHostPort ? null }:
+                 proxyDomains ? null }:
     let
+      # Bind this instance's host proxy socket into the jail. The host path is chosen at
+      # runtime so several instances of the same jail can run at once, each with its own socket.
       proxyBinds = pkgs.lib.optionals (proxyDomains != null) [
-        (jail.combinators.rw-bind "${homeDirectory}/.cache/jail-net/${name}.sock" jailProxySock)
+        (jail.combinators.unsafe-add-raw-args ''--bind "''${JAIL_PROXY_HOST_SOCK-}" ${jailProxySock}'')
       ];
       inner = jail "${name}-inner" program (
         commonJailOptions ++
@@ -115,23 +117,38 @@ let
         if proxyDomains == null then ''
           exec ${getExe inner} "$@"
         '' else ''
+          # Per-instance host proxy socket (keyed by this wrapper's PID) so concurrent
+          # instances of this jail don't collide.
           _jn_dir="${homeDirectory}/.cache/jail-net"
-          _jn_sock="$_jn_dir/${name}.sock"
           mkdir -p "$_jn_dir"
-          rm -f "$_jn_sock"
-          ${getExe jailNetProxy} "$_jn_sock" "${mkProxyConfFile name proxyHostPort proxyDomains}" "${toString proxyHostPort}" >>"$_jn_dir/${name}-proxy.log" 2>&1 &
-          _jn_pid=$!
-          trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; exit $_jn_st' EXIT INT TERM
-          _jn_w=0
-          while [ ! -S "$_jn_sock" ]; do
-            if ! kill -0 "$_jn_pid" 2>/dev/null; then
-              echo "${name}: network proxy exited before creating its socket" >&2
-              exit 1
-            fi
-            [ "$_jn_w" -gt 200 ] && { echo "${name}: timed out waiting for network proxy socket" >&2; exit 1; }
-            _jn_w=$((_jn_w + 1))
-            sleep 0.05
+          JAIL_PROXY_HOST_SOCK="$_jn_dir/${name}.$$.sock"
+          export JAIL_PROXY_HOST_SOCK
+
+          # Start the allowlist proxy. tinyproxy needs its own host TCP port; pick a random
+          # one and retry on a clash (the launcher only creates the socket once tinyproxy is
+          # up, so the socket appearing means success).
+          _jn_ok=0
+          for _jn_try in 1 2 3 4 5 6 7 8 9 10; do
+            _jn_port=$(( (RANDOM % 20000) + 20000 ))
+            ${getExe jailNetProxy} "$JAIL_PROXY_HOST_SOCK" "${mkProxyFilterFile name proxyDomains}" "$_jn_port" \
+              >>"$_jn_dir/${name}-proxy.log" 2>&1 &
+            _jn_pid=$!
+            _jn_w=0
+            while [ ! -S "$JAIL_PROXY_HOST_SOCK" ]; do
+              kill -0 "$_jn_pid" 2>/dev/null || break
+              [ "$_jn_w" -gt 100 ] && break
+              _jn_w=$((_jn_w + 1))
+              sleep 0.05
+            done
+            if [ -S "$JAIL_PROXY_HOST_SOCK" ]; then _jn_ok=1; break; fi
+            kill "$_jn_pid" 2>/dev/null || true
+            wait "$_jn_pid" 2>/dev/null || true
           done
+          if [ "$_jn_ok" -ne 1 ]; then
+            echo "${name}: could not start network proxy" >&2
+            exit 1
+          fi
+          trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; rm -f "$JAIL_PROXY_HOST_SOCK"; exit $_jn_st' EXIT INT TERM
           ${getExe inner} "$@"
         '';
     in pkgs.writeShellScriptBin name ''
@@ -145,9 +162,9 @@ let
   # The Claude<->Kaimon MCP socat bridge is present either way, since Kaimon always
   # runs in its own netns.
   makeJailedClaude = { extraPkgs ? [], name ? "jailed-claude", allowedDomains ? [],
-                       restrictNetwork ? false, extraArgs ? "", proxyHostPort ? 8121 }:
+                       restrictNetwork ? false, extraArgs ? "" }:
     makeJailed {
-      inherit name extraPkgs proxyHostPort;
+      inherit name extraPkgs;
       program = mkLauncher "claude" "${getExe claude-pkg} ${extraArgs}"
         (pkgs.lib.optional restrictNetwork proxyClientLeg ++ [ kaimonClientLeg ]);
       network = !restrictNetwork;
@@ -165,9 +182,9 @@ let
   # restrictNetwork = true : empty netns, internet only via the host allowlist proxy
   #   (e.g. the Julia registries). restrictNetwork = false: full host network.
   makeJailedJulia = { extraPkgs ? [], name ? "jailed-julia", allowedDomains ? [],
-                      restrictNetwork ? true, proxyHostPort ? 8122 }:
+                      restrictNetwork ? true }:
     makeJailed {
-      inherit name extraPkgs proxyHostPort;
+      inherit name extraPkgs;
       program = if restrictNetwork
                 then mkLauncher "julia" (getExe julia-pkg) [ proxyClientLeg ]
                 else julia-pkg;
