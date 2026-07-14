@@ -1,5 +1,6 @@
 { pkgs, jail, home-manager, devshellRoot, devshellHomeFolder,
-  devshellHostHomeFolder, devshellUser, jailHomeDirectory, homeDirectory }:
+  devshellHostHomeFolder, devshellUser, jailHomeDirectory, homeDirectory,
+  forbiddenBindPaths ? [] }:
 
 let
   inherit (pkgs.lib) getExe getExe';
@@ -80,8 +81,8 @@ let
 
   # The allowlist is enforced by tinyproxy. One instance runs on the host (host netns, real
   # DNS) per restricted-jail *process*, so several instances of the same jail can run at
-  # once; tinyproxy speaks TCP only, so it is bridged into the jail's empty netns over a
-  # per-instance bound unix socket (see jailNetProxy and makeJailed).
+  # once; tinyproxy speaks TCP only, so ip2unix makes it listen on a per-instance unix
+  # socket instead, which is bound into the jail's empty netns (see makeJailed).
 
   cacertBundle = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
 
@@ -129,48 +130,21 @@ let
       (d: "(^|\\.)" + (builtins.replaceStrings [ "." ] [ "\\." ] d) + "$")
       domains + "\n");
 
-  # Host-side launcher (args: SOCKET FILTER PORT): run one tinyproxy for a jail instance
-  # on 127.0.0.1:PORT with the given (build-time, store) allowlist FILTER, then expose it
-  # on the bound unix SOCKET via socat (tinyproxy speaks TCP only). The tiny conf wrapper
-  # is built here at runtime because PORT is chosen per instance (so several instances of
-  # the same jail can run at once). The socket is created only AFTER tinyproxy is confirmed
-  # listening, so its existence signals readiness to the caller (which retries on a port
-  # clash). Runs in the foreground; the trap tears down both children and the temp conf.
-  jailNetProxy = pkgs.writeShellScriptBin "jail-net-proxy" ''
-    set -eu
-    _sock="$1"; _filter="$2"; _port="$3"
-    _tp=""; _so=""
-    _dir="$(${getExe' pkgs.coreutils "mktemp"} -d)"
-    trap 'kill $_tp $_so 2>/dev/null || true; ${getExe' pkgs.coreutils "rm"} -rf "$_dir"' EXIT INT TERM
-
-    _conf="$_dir/tinyproxy.conf"
-    {
-      printf 'Port %s\n'            "$_port"
-      printf 'Listen 127.0.0.1\n'
-      printf 'Timeout 600\n'
-      printf 'MaxClients 100\n'
-      printf 'LogLevel Notice\n'
-      printf 'FilterDefaultDeny Yes\n'
-      printf 'Filter "%s"\n'        "$_filter"
-      printf 'FilterType ere\n'
-      printf 'FilterCaseSensitive Off\n'
-      printf 'ConnectPort 443\n'
-      printf 'ConnectPort 80\n'
-    } > "$_conf"
-
-    ${getExe pkgs.tinyproxy} -d -c "$_conf" &
-    _tp=$!
-    # Wait until tinyproxy is accepting on its port, or has died (e.g. the port was taken).
-    _w=0
-    until (exec 3<>/dev/tcp/127.0.0.1/"$_port") 2>/dev/null; do
-      kill -0 "$_tp" 2>/dev/null || exit 1
-      [ "$_w" -gt 100 ] && exit 1
-      _w=$((_w + 1)); sleep 0.05
-    done
-    ${getExe' pkgs.coreutils "rm"} -f "$_sock"
-    ${getExe pkgs.socat} UNIX-LISTEN:"$_sock",fork,reuseaddr TCP:127.0.0.1:"$_port" &
-    _so=$!
-    wait -n
+  # Build-time tinyproxy conf. The port is never bound on the host — ip2unix redirects
+  # the listener to the per-instance unix socket (see makeJailed) — so it is a constant
+  # and the whole conf can live in the store.
+  mkProxyConf = name: domains: pkgs.writeText "${name}-tinyproxy.conf" ''
+    Port ${toString proxyPort}
+    Listen 127.0.0.1
+    Timeout 600
+    MaxClients 100
+    LogLevel Notice
+    FilterDefaultDeny Yes
+    Filter "${mkProxyFilterFile name domains}"
+    FilterType ere
+    FilterCaseSensitive Off
+    ConnectPort 443
+    ConnectPort 80
   '';
 
 
@@ -206,6 +180,43 @@ let
     esac
   '';
 
+  # Host paths no jail may bind (directly, beneath, or via an ancestor bind source);
+  # enforced at eval time by assertNoForbiddenBinds. Footgun check, not a boundary.
+  protectedHostPaths = [ "${homeDirectory}/.cache/jail-net" ] ++ forbiddenBindPaths;
+  assertNoForbiddenBinds = name: jailed:
+    let
+      ancestors = path: pkgs.lib.foldl
+        (acc: c: acc ++ [ "${pkgs.lib.last acc}/${c}" ]) [ "" ]
+        (pkgs.lib.filter (c: c != "") (pkgs.lib.splitString "/" path));
+      exposes = path:
+        pkgs.lib.any
+          (p: pkgs.lib.hasInfix " ${p} " jailed.text || pkgs.lib.hasInfix "'${p}'" jailed.text)
+          (map (p: if p == "" then "/" else p) (ancestors path))
+        || pkgs.lib.hasInfix "${path}/" jailed.text;
+      exposed = pkgs.lib.filter exposes protectedHostPaths;
+
+      # static bind sources parsed from the bwrap args
+      firstArg = s:
+        if pkgs.lib.hasPrefix "'" s
+        then builtins.head (pkgs.lib.splitString "'" (pkgs.lib.removePrefix "'" s))
+        else builtins.head (pkgs.lib.splitString " " s);
+      bindSources = pkgs.lib.imap0
+        (i: chunk: if i == 0 || pkgs.lib.isList chunk then null else firstArg chunk)
+        (builtins.split "--(ro-|dev-)?bind(-try)? +" jailed.text);
+      allowedSource = s:
+        pkgs.lib.hasPrefix "\"" s ||                       # runtime-expanded ("$PWD", …)
+        pkgs.lib.hasPrefix builtins.storeDir s ||
+        pkgs.lib.hasPrefix "${homeDirectory}/" s ||
+        pkgs.lib.hasPrefix "~/.local/share/jail.nix/" s || # jail.nix fake-passwd data
+        s == "/run/systemd/resolve";                       # jail.nix network combinator
+      outside = pkgs.lib.filter (s: s != null && !allowedSource s) bindSources;
+    in
+    assert pkgs.lib.assertMsg (exposed == [])
+      "${name}: a bind exposes ${toString exposed} inside the jail";
+    assert pkgs.lib.assertMsg (outside == [])
+      "${name}: bind sources outside ${homeDirectory} and the nix store: ${toString outside}";
+    jailed;
+
   # Main function to create a sandboxed `exe`
   # `network` and `restrictNetwork` are mutually exclusive.
   makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], preHook ? "", network ? false,
@@ -218,50 +229,42 @@ let
       allSocatLegs = pkgs.lib.optionals restrictNetwork [ proxyClientLeg ] ++ socatLegs;
       program = mkLauncher name exe extraArgs allSocatLegs;
 
-      inner = jail "${name}-inner" program (
+      inner = assertNoForbiddenBinds name (jail "${name}-inner" program (
         commonJailOptions ++
         pkgs.lib.optionals network [ jail.combinators.network ] ++
         pkgs.lib.optionals (!network) localhostResolveBinds ++
         pkgs.lib.optionals restrictNetwork restrictedNetOptions ++
         options ++
-        [ (jail.combinators.add-pkg-deps extraPkgs) ]);
+        [ (jail.combinators.add-pkg-deps extraPkgs) ]));
 
       runInner =
         if !restrictNetwork then ''
           exec ${getExe inner} "$@"
         '' else ''
           # Per-instance host proxy socket (keyed by this wrapper's PID) so concurrent
-          # instances of this jail don't collide.
+          # instances of this jail don't collide. ip2unix makes tinyproxy listen on it
+          # directly; its TCP port is virtual, so instances cannot clash on it either.
+          # SECURITY: never bind .cache/ or .cache/jail-net into a jail — it holds every
+          # instance's proxy socket, and a jail reaching it could use another jail's
+          # allowlist. Only the single socket file below is bound in (restrictedNetOptions).
           _jn_dir="${homeDirectory}/.cache/jail-net"
           mkdir -p "$_jn_dir"
-          JAIL_PROXY_HOST_SOCK="$_jn_dir/${name}.$$.sock"
-          export JAIL_PROXY_HOST_SOCK
-
-          # Start the allowlist proxy. tinyproxy needs its own host TCP port; pick a random
-          # one and retry on a clash (the launcher only creates the socket once tinyproxy is
-          # up, so the socket appearing means success).
-          _jn_ok=0
-          for _jn_try in 1 2 3 4 5 6 7 8 9 10; do
-            _jn_port=$(( (RANDOM % 20000) + 20000 ))
-            ${getExe jailNetProxy} "$JAIL_PROXY_HOST_SOCK" "${mkProxyFilterFile name allowedDomains}" "$_jn_port" \
-              >>"$_jn_dir/${name}-proxy.log" 2>&1 &
-            _jn_pid=$!
-            _jn_w=0
-            while [ ! -S "$JAIL_PROXY_HOST_SOCK" ]; do
-              kill -0 "$_jn_pid" 2>/dev/null || break
-              [ "$_jn_w" -gt 100 ] && break
-              _jn_w=$((_jn_w + 1))
-              sleep 0.05
-            done
-            if [ -S "$JAIL_PROXY_HOST_SOCK" ]; then _jn_ok=1; break; fi
-            kill "$_jn_pid" 2>/dev/null || true
-            wait "$_jn_pid" 2>/dev/null || true
-          done
-          if [ "$_jn_ok" -ne 1 ]; then
-            echo "${name}: could not start network proxy" >&2
-            exit 1
-          fi
+          export JAIL_PROXY_HOST_SOCK="$_jn_dir/${name}.$$.sock"
+          rm -f "$JAIL_PROXY_HOST_SOCK"
+          ${getExe pkgs.ip2unix} -r in,tcp,port=${toString proxyPort},path="$JAIL_PROXY_HOST_SOCK" \
+            ${getExe pkgs.tinyproxy} -d -c ${mkProxyConf name allowedDomains} \
+            >>"$_jn_dir/${name}-proxy.log" 2>&1 &
+          _jn_pid=$!
           trap '_jn_st=$?; kill "$_jn_pid" 2>/dev/null; rm -f "$JAIL_PROXY_HOST_SOCK"; exit $_jn_st' EXIT INT TERM
+          # the socket appearing means tinyproxy accepted its conf and bound the listener
+          _jn_w=0
+          until [ -S "$JAIL_PROXY_HOST_SOCK" ]; do
+            if ! kill -0 "$_jn_pid" 2>/dev/null || [ "$_jn_w" -gt 100 ]; then
+              echo "${name}: could not start network proxy (see $_jn_dir/${name}-proxy.log)" >&2
+              exit 1
+            fi
+            _jn_w=$((_jn_w + 1)); sleep 0.05
+          done
           ${getExe inner} "$@"
         '';
     in pkgs.writeShellScriptBin name ''

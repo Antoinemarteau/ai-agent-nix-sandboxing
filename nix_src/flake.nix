@@ -36,6 +36,15 @@
       "uv" "conda" "docker" "apt"
     ];
 
+    # Host paths no jail may bind, checked at eval time
+    forbiddenBindPaths = [
+      "${agentHomeDirectory}/.envrc"   # host direnv executes it
+      "${agentHomeDirectory}/.direnv"  # host direnv sources its cache without re-approval
+      "${devshellRoot}/${devshellHostHomeFolder}"  # host interactive $HOME (zsh/tmux startup files)
+      "${devshellRoot}/nix_src"        # this flake: defines the jails themselves
+      "${devshellRoot}/.git"           # repo hooks/config run by host git
+    ];
+
 
     ###########################################################################
     # Directory architecture related variables #
@@ -55,7 +64,7 @@
 
     jailedAgents = import ./jailed-agents.nix {
       inherit pkgs jail home-manager devshellRoot devshellHomeFolder
-              devshellHostHomeFolder devshellUser jailHomeDirectory;
+              devshellHostHomeFolder devshellUser jailHomeDirectory forbiddenBindPaths;
       homeDirectory = agentHomeDirectory;
     };
     inherit (jailedAgents)
