@@ -197,7 +197,6 @@ let
       options = juliaDepotWriteBinds ++ kaimonCacheWriteBinds ++ nixLdBinds
         ++ pkgs.lib.optionals restrictNetwork restrictedNetOptions
         ++ (with jail.combinators; [
-        #(share-ns "pid") # required for Kaimon <-> Julia servers comm.
         ]);
     };
 
@@ -218,7 +217,6 @@ let
         kaimonBridgeBinds ++
         kaimonConfigWriteBinds ++
         localhostResolveBinds ++ [
-        #(share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (add-pkg-deps [ julia-pkg ])
         ];
     };
@@ -243,7 +241,6 @@ let
         kaimonConfigWriteBinds ++
         kaimonCacheWriteBinds ++
         nixLdBinds ++ [
-                    #(share-ns "pid") # required for Kaimon <-> Julia servers comm.
           (ro-bind "${homeDirectory}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
           (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
           (set-env "LANG" "C.UTF-8")
