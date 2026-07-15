@@ -107,8 +107,9 @@
 
     makeJailedKaimon = { extraPkgs ? [], name ? "jailed-kaimon" }:
       makeJailed {
-        inherit name extraPkgs;
+        inherit name;
         exe = "~/.julia/bin/kaimon";
+        extraPkgs = [ julia-pkg ] ++ extraPkgs;
         socatLegs = [ kaimonServerLeg ];
         network = false;
         preHook = ''
@@ -117,13 +118,11 @@
           mkdir -p ${agentHomeDirectory}/.cache/kaimon-jail-sock
           mkdir -p ${agentHomeDirectory}/.config/kaimon
         '';
-        options = with jail.combinators;
+        options =
           juliaDepotReadBinds ++
           kaimonCacheWriteBinds ++
           kaimonBridgeBinds ++
-          kaimonConfigWriteBinds ++ [
-            (add-pkg-deps [ julia-pkg ])
-          ];
+          kaimonConfigWriteBinds;
       };
 
 
@@ -203,8 +202,9 @@
 
     makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
       makeJailed {
-        inherit name extraPkgs;
+        inherit name;
         exe = pkgs.zsh;
+        extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ] ++ extraPkgs;
         network = true;
         preHook = ''
           # makes sure a writable and host persisted .claude.json file exists
@@ -227,7 +227,6 @@
             (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
             (set-env "LANG" "C.UTF-8")
             (set-env "TERMINFO_DIRS" "${pkgs.ncurses}/share/terminfo")
-            (add-pkg-deps [ pkgs.zsh pkgs.ncurses zshHomeFiles ])
           ];
       };
 
