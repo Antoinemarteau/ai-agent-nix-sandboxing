@@ -203,7 +203,8 @@ let
         mkdir -p "${r}_dir"
         ${v}_sock="${r}_dir/${name}.$$.sock"
         rm -f "${r}_sock"
-        ${getExe pkgs.socat} UNIX-LISTEN:"${r}_sock",fork EXEC:"${getExe serverExe}",pipes &
+        ${getExe pkgs.socat} UNIX-LISTEN:"${r}_sock",fork EXEC:"${getExe serverExe}",pipes \
+          >>"${r}_dir/${name}.log" 2>&1 &
         ${v}_pid=$!
         ${v}_w=0
         until [ -S "${r}_sock" ]; do
