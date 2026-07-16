@@ -238,6 +238,7 @@
           kaimonCacheWriteBinds ++
           nixLdBinds ++ [
             (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+            (ro-bind "${zshHomeFiles}/.config/starship.toml" "${jailHomeDirectory}/.config/starship.toml")
             # persistent zsh history, shared across jailed-shell invocations
             (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
             (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state") # zsh history

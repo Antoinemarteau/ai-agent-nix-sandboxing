@@ -8,7 +8,14 @@
 # straight into the jail). Keeping one module definition means both stay in sync.
 home-manager.lib.homeManagerConfiguration {
   inherit pkgs;
-  modules = [({ config, lib, ... }: {
+  modules = [({ config, lib, ... }:
+  let
+    # 30% orange blended over the kitty #0a0a0a background for the host shells;
+    # the jailed prompt keeps the terminal background.
+    promptBg = if forHost then "#543007" else null;
+    # starship has no global background option: append it to every module style
+    bg = style: if promptBg == null then style else "${style} bg:${promptBg}";
+  in {
     home.username = devshellUser;
     home.homeDirectory = homeDirectory;
     home.stateVersion = "25.11";
@@ -36,12 +43,49 @@ home-manager.lib.homeManagerConfiguration {
 
         initContent = lib.mkOrder 700 ''
           export AGNOSTER_DIR_BG=${if forHost then "208" else "blue"}
+          export STARSHIP_CONFIG=${config.xdg.configHome}/starship.toml
         '';
 
         oh-my-zsh = {
           enable = true;
           plugins = [ "git" ];
           theme = "agnoster";
+        };
+      };
+
+      starship = {
+        enable = true;
+        settings = {
+          format = "$username$hostname$directory$git_branch$git_status$julia"
+            + lib.optionalString (promptBg != null) "[](fg:${promptBg})"
+            + "$line_break$character";
+          username = {
+            show_always = true;
+            format = "[ $user]($style)";
+            style_user = bg "bold yellow";
+            style_root = bg "bold red";
+          };
+          hostname = {
+            ssh_only = false;
+            format = "[@$hostname ]($style)";
+            style = bg "bold yellow";
+          };
+          directory = {
+            format = "[ $path ]($style)";
+            style = bg "bold cyan";
+          };
+          git_branch = {
+            format = "[$symbol$branch ]($style)";
+            style = bg "bold purple";
+          };
+          git_status = {
+            format = "([$all_status$ahead_behind ]($style))";
+            style = bg "bold red";
+          };
+          julia = {
+            format = "[$symbol($version) ]($style)";
+            style = bg "bold purple";
+          };
         };
       };
     } // pkgs.lib.optionalAttrs forHost {
