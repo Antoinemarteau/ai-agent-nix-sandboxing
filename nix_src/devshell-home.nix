@@ -125,6 +125,11 @@ home-manager.lib.homeManagerConfiguration {
           set -g default-terminal "tmux-256color"
           set -g mouse on
 
+          # OSC 52 clipboard: nvim (and copy-mode) hand off through the terminal,
+          # so no X server is needed inside the jail; tmux also keeps it in a buffer
+          set -g set-clipboard on
+          set -as terminal-features ',*:clipboard'
+
           # 2x C-b goes back and fourth between most recent windows
           bind-key C-b last-window
 
