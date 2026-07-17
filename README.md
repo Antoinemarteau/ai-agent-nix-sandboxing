@@ -157,15 +157,19 @@ juliaAllowedDomains  = [
 
 ### Git identity and GitHub token
 
-To give a git identity for the agent, set name and email in
-`agentshome/.gitconfig`. If you want it to pull/push, create
+There are two git identities. To give one to the agents, set name and email in
+`agentshome/.gitconfig`. If you want them to pull/push, create
 `agentshome/.git-credentials` with a GitHub [fine-grained Personal Access Token
-(PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token):
+(PAT)](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-fine-grained-personal-access-token)
+from a dedicated secondary account:
 ```bash
 echo 'https://x-access-token:github_pat_{YOUR-TOKEN-HERE}@github.com' > agentshome/.git-credentials
 chmod 600 agentshome/.git-credentials
 ```
-Make sure to not commit `.git-credentials` or `.claude/.credentials.json` to git...
+`jailed-shell` instead uses your personal identity from `.hosthome/.gitconfig`
+and `.hosthome/.git-credentials` (same format; read-only in that jail and never
+bound into the agent jails), so you review and push agent work as yourself.
+Make sure to not commit either `.git-credentials`, or `.claude/.credentials.json`, to git...
 
 
 ## Security notes
@@ -200,7 +204,9 @@ The tmux session layout is user-editable at
 `.hosthome/.config/tmux/default-session.conf`, and the shell/tmux/editor
 [home-manager
 configurations](https://home-manager-options.extranix.com/?query=zsh&release=release-25.11)
-of both the host panes and `jailed-shell` live in `nix_src/devshell-home.nix`.
+of both the host panes and the shell jails live in `nix_src/devshell-home.nix`.
+For debugging the jails, `jail-debug` opens a zsh with all dev tools and every
+other jail's binds.
 
 The top-level `CLAUDE.md` and `.claude/memories/` files are provided to give (a
 not-sandboxed) coding agents context about this template and how to personalize

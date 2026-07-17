@@ -72,7 +72,7 @@
       homeDirectory = agentHomeDirectory;
     };
     inherit (jailedAgents)
-      makeJailed mkServerSocketOptions gitReadBinds nixLdBinds
+      makeJailed mkServerSocketOptions gitReadBinds nixLdBinds hostGitEnv saferHostGit
       hostHomeManager newAgentSession attachAgentSession guardHostTool;
 
     tmux-pkg = hostHomeManager.config.programs.tmux.package;
@@ -211,20 +211,20 @@
 
 
     ###########################################################################
-    # jailed-shell
-    # for safely working within projects/ and debugging other jails
+    # jail-debug
+    # for debugging other jails
     ###########################################################################
 
     # devshell-home.nix's zsh config (oh-my-zsh, aliases, history), instantiated for
-    # jailed-shell: never activated — only its build-time `home-files` output is
-    # consumed, ro-bound straight into the jail below.
+    # the shell jails: never activated — only its build-time `home-files` output is
+    # consumed, ro-bound straight into the jails below.
     jailShellHomeManager = import ./devshell-home.nix {
       inherit pkgs home-manager devshellUser;
       homeDirectory = jailHomeDirectory;
     };
     zshHomeFiles = jailShellHomeManager.config.home-files;
 
-    makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
+    makeJailDebug = { extraPkgs ? [], name ? "jail-debug" }:
       makeJailed {
         inherit name;
         exe = pkgs.zsh;
@@ -242,6 +242,50 @@
             # persistent zsh history, shared across jailed-shell invocations
             (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
             (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state") # zsh history
+            (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
+            (set-env "LANG" "C.UTF-8")
+            (add-runtime ''
+              if [ -n "''${TERMINFO-}" ] && [ -d "''${TERMINFO-}" ]; then
+                RUNTIME_ARGS+=(--ro-bind "$TERMINFO" /run/host-terminfo)
+              fi
+            '')
+            (set-env "TERMINFO_DIRS" "/run/host-terminfo:${pkgs.ncurses}/share/terminfo")
+          ];
+      };
+
+
+    ###########################################################################
+    # jailed-shell
+    # minimal human-run shell for reviewing agent work and pushing it with the
+    # personal git credentials from .hosthome/
+    ###########################################################################
+
+    hostHomeDir = "${devshellRoot}/${devshellHostHomeFolder}";
+
+    hostGitFiles = [
+      "${hostHomeDir}/.gitconfig"
+      "${hostHomeDir}/.git-credentials"
+    ];
+    hostGitBinds = with jail.combinators; [
+      (try-ro-bind "${hostHomeDir}/.gitconfig" "${jailHomeDirectory}/.gitconfig")
+      (try-ro-bind "${hostHomeDir}/.git-credentials" "${jailHomeDirectory}/.git-credentials")
+    ];
+
+    makeJailedShell = { extraPkgs ? [], name ? "jailed-shell" }:
+      makeJailed {
+        inherit name;
+        exe = pkgs.zsh;
+        extraPkgs = [ pkgs.zsh pkgs.ncurses zshHomeFiles ]
+          ++ extraPkgs ++ [ saferHostGit ];
+        network = true;
+        trustedBindPaths = hostGitFiles;
+        options = with jail.combinators;
+          hostGitBinds ++
+          hostGitEnv ++ [
+            (ro-bind "${zshHomeFiles}/.config/zsh" "${jailHomeDirectory}/.config/zsh")
+            (ro-bind "${zshHomeFiles}/.config/starship.toml" "${jailHomeDirectory}/.config/starship.toml")
+            (add-runtime "mkdir -p ${agentHomeDirectory}/.local/state")
+            (rw-bind "${agentHomeDirectory}/.local/state" "${jailHomeDirectory}/.local/state")
             (set-env "ZDOTDIR" "${jailHomeDirectory}/.config/zsh")
             (set-env "LANG" "C.UTF-8")
             (add-runtime ''
@@ -301,8 +345,13 @@
         # registries; spawned by the claude jails on demand, exposed for debugging
         jailedJuliaMcp
 
-        # jailed-shell: zsh with all dev. tools and all folders other jail have binded for debugging
+        # jailed-shell: minimal shell with the personal git credentials for reviewing/pushing agent work
         (makeJailedShell {
+          extraPkgs = [ neovim gh ];
+        })
+
+        # jail-debug: zsh with all dev. tools and all folders other jail have binded for debugging
+        (makeJailDebug {
           extraPkgs = [
             vim claude-pkg julia-pkg python3 gh man gzip unzip gnutar
           ];

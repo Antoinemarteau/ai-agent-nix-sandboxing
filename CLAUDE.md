@@ -57,7 +57,7 @@ new_agent_session
 
 Tools available on `PATH` inside the env:
 - `jailed-claude`, `yolo-jailed-claude` — sandboxed Claude Code (the latter with `--dangerously-skip-permissions`).
-- `jailed-kaimon`, `jailed-julia` (egress restricted to the Julia registries), `yolo-jailed-julia` (full network), `jailed-shell` — the jails.
+- `jailed-kaimon`, `jailed-julia` (egress restricted to the Julia registries), `yolo-jailed-julia` (full network), `jailed-shell` (minimal human shell for reviewing/pushing with the personal `.hosthome/` git credentials, hardened `git` wrapper), `jail-debug` (zsh with all dev tools and every jail's binds) — the jails.
 - `claude-connect-kaimon` — one-shot helper to register the Kaimon MCP server in Claude.
 - **Guarded** host tools (`git`, `gh`, `julia`, `claude`, `kaimon`, `make`, `python`, `pip`,
   `uv`, `conda`, `node`, `npm`, `docker`, `apt` — full list is `guardedHostTools` in
@@ -158,8 +158,9 @@ the project dir).
   in `jailed-agents.nix`, which scans each launcher's bwrap args for bind sources that
   expose `.cache/jail-net` or any `forbiddenBindPaths` entry (set in `flake.nix`; also
   covers ancestor binds up to `/`), and requires every static bind source to be under
-  `agentshome/` or the nix store (jail.nix's `~/.local/share/jail.nix` fake-passwd data
-  and `/run/systemd/resolve` excepted). Footgun check, not a boundary — runtime `"$…"`
+  `agentshome/` or the nix store (jail.nix's `~/.local/share/jail.nix` fake-passwd data,
+  `/run/systemd/resolve`, and per-jail `trustedBindPaths` exceptions — e.g. jailed-shell's
+  `.hosthome/` git files — excepted). Footgun check, not a boundary — runtime `"$…"`
   bwrap args are not parsed, and read-only binds are rejected too (unix-socket
   `connect()` works through a ro mount).
 

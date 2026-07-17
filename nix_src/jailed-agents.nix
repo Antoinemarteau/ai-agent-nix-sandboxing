@@ -47,6 +47,73 @@ let
     (try-ro-bind "${homeDirectory}/.git-credentials" "${jailHomeDirectory}/.git-credentials")
   ];
 
+  # Git config forced on every git run in the jail via GIT_CONFIG_* env vars
+  # (command-line scope: outranks a repo-local .git/config, and is inherited by
+  # git run from other tools, e.g. gh): no hooks, no fsmonitor/ssh/ext commands,
+  # and the credential-helper list is reset (empty entry) to the store on the
+  # ro-bound host credentials file (writes are refused by the mount, so get-only).
+  saferHostGitConfig = [
+    { key = "core.hooksPath";     value = "${pkgs.emptyDirectory}"; }
+    { key = "core.fsmonitor";     value = "false"; }
+    { key = "core.sshCommand";    value = "false"; }
+    { key = "protocol.ext.allow"; value = "never"; }
+    { key = "credential.helper";  value = ""; }
+    { key = "credential.helper";  value = "store --file ${jailHomeDirectory}/.git-credentials"; }
+  ];
+  hostGitEnv = with jail.combinators;
+    [ (set-env "GIT_CONFIG_NOSYSTEM" "1")
+      (set-env "GIT_CONFIG_COUNT" (toString (builtins.length saferHostGitConfig)))
+    ] ++ pkgs.lib.concatLists (pkgs.lib.imap0 (i: c: [
+      (set-env "GIT_CONFIG_KEY_${toString i}" c.key)
+      (set-env "GIT_CONFIG_VALUE_${toString i}" c.value)
+    ]) saferHostGitConfig);
+
+  # git wrapper that refuses to run while the repo-local/worktree config contains
+  # keys that can execute code or redirect credentials and whose names hostGitEnv
+  # cannot pre-override (alias.*, url.*.insteadOf, filter.*, diff drivers, …).
+  # Shadows the plain git when listed after commonJailPkgs (add-pkg-deps prepends
+  # each package to PATH, so the last one wins).
+  saferHostGit = pkgs.writeShellScriptBin "git" ''
+    _args=("$@")
+    # Collect the repo-locating global options preceding the subcommand, so the
+    # audit below inspects the repo git will actually operate on (git -C …, etc.).
+    _repo_opts=()
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        # repo-locating, separate value
+        -C|--git-dir|--work-tree|--namespace)
+          [ $# -ge 2 ] || break
+          _repo_opts+=("$1" "$2"); shift 2 ;;
+        # repo-locating, inline value or none
+        --git-dir=*|--work-tree=*|--namespace=*|--bare)
+          _repo_opts+=("$1"); shift ;;
+        # value-taking globals that don't affect repo discovery
+        -c|--config-env|--attr-source)
+          [ $# -ge 2 ] || break
+          shift 2 ;;
+        # any other global flag is valueless; first non-flag is the subcommand
+        -*)
+          shift ;;
+        *)
+          break ;;
+      esac
+    done
+    # Audit only the local and worktree scopes: system is disabled, global is the
+    # ro-bound host ~/.gitconfig, and command scope is hostGitEnv's own overrides.
+    _cfg="$(${getExe pkgs.git} "''${_repo_opts[@]}" --no-pager config --list --show-scope 2>/dev/null |
+      awk -F'\t' '$1 == "local" || $1 == "worktree" { print $2 }')" || _cfg=""
+    _bad="$(printf '%s\n' "$_cfg" | grep -Ei '^(alias|url|filter|credential|include|includeif|submodule|http|protocol|pager|gpg|sendemail|browser|web|man|instaweb|difftool|mergetool)\.|^core\.(hookspath|fsmonitor|fsmonitorhookversion|sshcommand|gitproxy|pager|editor|askpass)|^sequence\.editor|^trailer\.[^.]+\.(command|cmd)|^diff\.(external|[^.]+\.(command|textconv))|^merge\.[^.]+\.driver|^remote\.[^.]+\.(uploadpack|receivepack|proxy|vcs)')" || _bad=""
+    if [ -n "$_bad" ]; then
+      {
+        echo "git: refusing to run — dangerous repo-local git config (this checkout is agent-writable):"
+        printf '%s\n' "$_bad" | awk '{ print "  " $0 }'
+        echo "inspect .git/config (and .git/config.worktree), remove the offending keys, then retry"
+      } >&2
+      exit 1
+    fi
+    exec ${getExe pkgs.git} "''${_args[@]}"
+  '';
+
   # Architecture specific ELF interpreter, e.g. /lib64/ld-linux-x86-64.so.2
   # for nix-ld support
   nixLdInterpreterPath = pkgs.lib.removeSuffix "\n" (builtins.readFile "${pkgs.nix-ld}/nix-support/ldpath");
@@ -259,17 +326,21 @@ let
 
   # Host paths no jail may bind (directly, beneath, or via an ancestor bind source);
   # enforced at eval time by assertNoForbiddenBinds. Footgun check, not a boundary.
+  # Per-jail exceptions (exact paths, human-approved) come in via makeJailed's
+  # trustedBindPaths: they are blanked from the scanned text and accepted as sources.
   protectedHostPaths = [ "${homeDirectory}/.cache/jail-net" ] ++ forbiddenBindPaths;
-  assertNoForbiddenBinds = name: jailed:
+  assertNoForbiddenBinds = name: trustedBindPaths: jailed:
     let
+      scrubbedText = builtins.replaceStrings
+        trustedBindPaths (map (_: "") trustedBindPaths) jailed.text;
       ancestors = path: pkgs.lib.foldl
         (acc: c: acc ++ [ "${pkgs.lib.last acc}/${c}" ]) [ "" ]
         (pkgs.lib.filter (c: c != "") (pkgs.lib.splitString "/" path));
       exposes = path:
         pkgs.lib.any
-          (p: pkgs.lib.hasInfix " ${p} " jailed.text || pkgs.lib.hasInfix "'${p}'" jailed.text)
+          (p: pkgs.lib.hasInfix " ${p} " scrubbedText || pkgs.lib.hasInfix "'${p}'" scrubbedText)
           (map (p: if p == "" then "/" else p) (ancestors path))
-        || pkgs.lib.hasInfix "${path}/" jailed.text;
+        || pkgs.lib.hasInfix "${path}/" scrubbedText;
       exposed = pkgs.lib.filter exposes protectedHostPaths;
 
       # static bind sources parsed from the bwrap args
@@ -285,7 +356,8 @@ let
         pkgs.lib.hasPrefix builtins.storeDir s ||
         pkgs.lib.hasPrefix "${homeDirectory}/" s ||
         pkgs.lib.hasPrefix "~/.local/share/jail.nix/" s || # jail.nix fake-passwd data
-        s == "/run/systemd/resolve";                       # jail.nix network combinator
+        s == "/run/systemd/resolve" ||                     # jail.nix network combinator
+        builtins.elem s trustedBindPaths;
       outside = pkgs.lib.filter (s: s != null && !allowedSource s) bindSources;
     in
     assert pkgs.lib.assertMsg (exposed == [])
@@ -297,7 +369,8 @@ let
   # Main function to create a sandboxed `exe`
   # `network` and `proxiedNetwork` are mutually exclusive.
   makeJailed = { name, exe, extraArgs ? "", socatLegs ? [], network ? false,
-                 options ? [], extraPkgs ? [], proxiedNetwork ? false, allowedDomains ? [] }:
+                 options ? [], extraPkgs ? [], proxiedNetwork ? false, allowedDomains ? [],
+                 trustedBindPaths ? [] }:
     assert pkgs.lib.assertMsg (!(network && proxiedNetwork))
       "${name}: network and proxiedNetwork are mutually exclusive";
     assert pkgs.lib.assertMsg (proxiedNetwork || allowedDomains == [])
@@ -305,7 +378,7 @@ let
     let
       allSocatLegs = pkgs.lib.optionals proxiedNetwork [ proxyClientLeg ] ++ socatLegs;
       program = mkLauncher name exe extraArgs allSocatLegs;
-    in assertNoForbiddenBinds name (jail name program (
+    in assertNoForbiddenBinds name trustedBindPaths (jail name program (
       [ (jail.combinators.add-runtime (assertInDevshell name)) ] ++
       commonJailOptions ++
       pkgs.lib.optionals network [ jail.combinators.network ] ++
@@ -410,6 +483,6 @@ let
   '';
 
 in {
-  inherit makeJailed mkServerSocketOptions gitReadBinds nixLdBinds
+  inherit makeJailed mkServerSocketOptions gitReadBinds nixLdBinds hostGitEnv saferHostGit
           hostHomeManager newAgentSession attachAgentSession guardHostTool;
 }
