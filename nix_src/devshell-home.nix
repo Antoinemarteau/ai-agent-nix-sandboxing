@@ -104,6 +104,7 @@ home-manager.lib.homeManagerConfiguration {
         keyMode = "vi";
         customPaneNavigationAndResize = true;
 
+        prefix = "C-t";
         shell = "${pkgs.zsh}/bin/zsh";
 
         # neovim compatibility https://github.com/neovim/neovim/wiki/FAQ
@@ -130,8 +131,14 @@ home-manager.lib.homeManagerConfiguration {
           set -g set-clipboard on
           set -as terminal-features ',*:clipboard'
 
-          # 2x C-b goes back and fourth between most recent windows
-          bind-key C-b last-window
+          # 2x C-t goes back and fourth between most recent windows
+          bind-key C-t last-window
+
+          # neovim compatibility https://github.com/neovim/neovim/wiki/FAQ
+          set -g focus-events on
+
+          # Update the status line every seconds
+          set -g status-interval 1
 
           # Create new window (in the project dir) and name it directly
           bind C command-prompt -p "Name of new window: " "new-window -c '#{@proj}' -n '%%'"
@@ -141,22 +148,25 @@ home-manager.lib.homeManagerConfiguration {
           bind  %  split-window -h -c "#{pane_current_path}"
           bind  c  new-window      -c "#{pane_current_path}"
 
-          # Update the status line every seconds
-          set -g status-interval 1
-
-          # neovim compatibility https://github.com/neovim/neovim/wiki/FAQ
-          set -g focus-events on
-
-          # vim-like copy mode selection and yank
-          bind -T copy-mode-vi v   send-keys -X begin-selection
-          bind -T copy-mode-vi C-v send-keys -X rectangle-toggle
-          bind -T copy-mode-vi y   send-keys -X copy-pipe-and-cancel 'xclip -in -selection clipboard'
-
           # index window and panes from 1
           set -g base-index 1
           set -g pane-base-index 1
           set-window-option -g pane-base-index 1
           set-option -g renumber-windows on
+
+          # vim-like pane switching and edditing
+          bind -T copy-mode-vi v   send-keys -X begin-selection
+          bind -T copy-mode-vi C-v send-keys -X rectangle-toggle
+          bind -T copy-mode-vi y   send-keys -X copy-pipe-and-cancel 'xclip -in -selection clipboard'
+          bind -T copy-mode-vi s   send-keys -X cursor-up
+          bind -T copy-mode-vi t   send-keys -X cursor-down
+          bind -T copy-mode-vi c   send-keys -X cursor-left
+          bind -T copy-mode-vi r   send-keys -X cursor-right
+          bind -r ^ last-window
+          bind -r s select-pane -U
+          bind -r t select-pane -D
+          bind -r c select-pane -L
+          bind -r r select-pane -R
         '';
       };
     };
