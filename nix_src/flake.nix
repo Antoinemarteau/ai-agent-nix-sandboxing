@@ -29,7 +29,7 @@
     ###########################################################################
 
     # NECESSARY TO SET to the repository root, containing the current file
-    devshellRoot = "/home/antoine/prog/agents";
+    devshellRoot = "/home/user1/agentprog";
 
     # Network whitelists
     claudeAllowedDomains = [ "anthropic.com" "claude.ai" "claude.com" "github.com" "githubusercontent.com" ];
