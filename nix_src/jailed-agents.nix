@@ -236,7 +236,8 @@ let
   mkProxyConf = name: domains: pkgs.writeText "${name}-tinyproxy.conf" ''
     Port ${toString proxyPort}
     Listen 127.0.0.1
-    Timeout 86400 # long timout since Claude sometimes re-uses tunnel openned long ago (e.g., long time between calling advisor).
+    # long timout since Claude sometimes re-uses tunnel openned long ago (e.g., long time between calling advisor).
+    Timeout 86400
     MaxClients 100
     LogLevel Notice
     FilterDefaultDeny Yes
